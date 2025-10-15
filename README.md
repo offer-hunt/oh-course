@@ -20,3 +20,10 @@ docker-compose up -d
 ```bash
 docker-compose down
 ```
+
+## 2. Docker образ
+
+После каждого успешного билда в ветке `main`, CI автоматически собирает и публикует Docker образ.
+
+*   **Репозиторий на Docker Hub:** `https://hub.docker.com/r/termoler/oh-course`
+*   **Имя образа:** `termoler/oh-course:latest`
