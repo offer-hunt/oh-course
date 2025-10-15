@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:course_service_db}
+    username: ${DB_USER:course_service_admin}
+    password: ${DB_PASS:example}
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    schemas: course_schema
+    baseline-on-migrate: true
+
+
+# JWT env-vars (read in SecurityConfig)
+app:
+  auth:
+    issuer: ${AUTH_ISSUER:http://localhost:8000}
+    jwks-uri: ${AUTH_JWKS_URL:http://localhost:8000/.well-known/jwks.json}
+    audience: ${AUTH_AUDIENCE:oh-course}
+
+
+server:
+  port: 8080
