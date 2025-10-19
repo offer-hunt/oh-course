@@ -1,14 +1,14 @@
 version: '3.8'
 
 services:
-  pg-course:
+  postgres:
     image: postgres:16
     container_name: oh-course-postgres
     restart: always
     environment:
       POSTGRES_USER: course_user
       POSTGRES_PASSWORD: course_password
-      POSTGRES_DB: course_db
+      POSTGRES_DB: course
     ports:
       - "5432:5432"
     volumes:
