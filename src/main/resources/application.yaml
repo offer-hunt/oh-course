@@ -1,0 +1,28 @@
+spring:
+    datasource:
+        url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:course_db}
+        username: ${DB_USER:course_user}
+        password: ${DB_PASS:course_password}
+    jpa:
+        hibernate:
+        ddl-auto: none
+    flyway:
+        enabled: false
+        locations: classpath:db/migration
+        schemas: course_schema
+        baseline-on-migrate: true
+
+
+# JWT env-vars (read in SecurityConfig)
+app:
+  auth:
+    issuer: ${AUTH_ISSUER:http://localhost:8999}
+    jwks-url: ${AUTH_JWKS_URL:http://localhost:8999/.well-known/jwks.json}
+    audience: ${AUTH_AUDIENCE:oh-course}
+    allowed-algs: RS256
+    jwks-cache-ttl-seconds: ${JWKS_CACHE_TTL:900}   # 15 min
+    jwks-cache-max-size: ${JWKS_CACHE_MAX:10}
+    leeway-seconds: ${JWT_LEEWAY:120}
+
+server:
+  port: 8080
