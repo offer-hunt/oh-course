@@ -13,6 +13,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.util.UUID;
+
 @SpringBootTest(
         properties = {
                 "spring.flyway.enabled=true",
@@ -50,13 +52,30 @@ class DbSmokeTest {
     void schema() {
         Integer cnt =
                 jdbc.queryForObject(
-                        "select count(*) from information_schema.tables where table_schema = 'course' and table_name='__migration_probe'",
+                        "select count(*) " +
+                                "from information_schema.tables " +
+                                "where table_schema = 'course' and table_name = 'course_courses'",
                         Integer.class);
         assertThat(cnt).isNotNull().isGreaterThanOrEqualTo(1);
 
-        Long id =
-                jdbc.queryForObject(
-                        "insert into course.__migration_probe default values returning id", Long.class);
-        assertThat(id).isNotNull().isPositive();
+        UUID courseId = UUID.randomUUID();
+        UUID authorId = UUID.randomUUID();
+
+        int rows =
+                jdbc.update(
+                        "insert into course.course_courses " +
+                                "(id, author_id, title, slug, status, access_type, " +
+                                " requires_entitlement, version, created_at) " +
+                                "values (?,?,?,?,?,?,?, ?, now())",
+                        courseId,
+                        authorId,
+                        "Smoke test course",
+                        "smoke-" + courseId,
+                        "DRAFT",
+                        "PUBLIC",
+                        false,
+                        1);
+
+        assertThat(rows).isEqualTo(1);
     }
 }

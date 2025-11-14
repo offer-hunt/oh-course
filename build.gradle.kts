@@ -24,6 +24,16 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server:3.3.2")
     implementation("org.springframework.boot:spring-boot-starter-jdbc:3.3.2")
 
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.projectlombok:lombok:1.18.38")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.mapstruct:mapstruct:1.5.5.Final")
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
+
+    compileOnly("org.projectlombok:lombok:1.18.38")
+    annotationProcessor("org.projectlombok:lombok:1.18.38")
+    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
+
     // --- Database & migrations ---
     implementation("org.flywaydb:flyway-database-postgresql:11.10.0")
     runtimeOnly("org.postgresql:postgresql:42.7.4")
@@ -36,9 +46,12 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test:6.3.2")
     testImplementation("org.testcontainers:junit-jupiter:1.20.3")
     testImplementation("org.testcontainers:postgresql:1.20.3")
+    testImplementation("org.postgresql:postgresql:42.7.4")
+    testImplementation("com.h2database:h2")
 
     testImplementation ("org.wiremock:wiremock-jetty12:3.9.1")
 
+    testAnnotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
 }
 
 tasks.test {
