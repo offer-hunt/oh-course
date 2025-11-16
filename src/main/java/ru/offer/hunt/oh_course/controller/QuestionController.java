@@ -35,9 +35,11 @@ public class QuestionController {
         return service.create(pageID, request, optionals);
     }
 
-
-
-
+    @PostMapping("createDetailedAnswer/{questionId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    public QuestionDto createDetailedAnswer(@PathVariable("pageId") UUID pageID, @RequestBody @Valid QuestionUpsertRequest request, @RequestBody @Valid QuestionOptionUpsertRequest optional){
+        return service.createDetailedAnswer(pageID, request);
+    }
 
 
 }
