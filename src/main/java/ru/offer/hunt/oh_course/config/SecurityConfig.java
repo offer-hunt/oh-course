@@ -3,6 +3,7 @@ package ru.offer.hunt.oh_course.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,15 +14,20 @@ import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
-import org.springframework.security.oauth2.jwt.*;
-import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 
 @Configuration
+@Profile("!local")
 public class SecurityConfig {
 
     @Value("${app.auth.issuer}")
@@ -41,10 +47,20 @@ public class SecurityConfig {
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
                 .authorizeHttpRequests(
                         auth ->
-                                auth.requestMatchers("/actuator/health", "/actuator/info")
+                                auth
+                                        // actuator
+                                        .requestMatchers("/actuator/health", "/actuator/info")
                                         .permitAll()
+                                        // swagger
+                                        .requestMatchers(
+                                                "/v3/api-docs/**",
+                                                "/swagger-ui.html",
+                                                "/swagger-ui/**")
+                                        .permitAll()
+
                                         .requestMatchers(HttpMethod.GET, "/api/secure/ping")
                                         .hasAuthority("SCOPE_course.read")
+
                                         .anyRequest()
                                         .authenticated())
                 .oauth2ResourceServer(
