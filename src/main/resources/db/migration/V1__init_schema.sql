@@ -129,3 +129,15 @@ create table if not exists course.course_stats
     avg_rating      numeric(3,2) not null default 0,
     updated_at      timestamptz not null default now()
 );
+
+create table if not exists course.course_content_versions
+(
+    id           uuid primary key,
+    course_id    uuid not null references course.course_courses (id),
+    lesson_id    uuid null references course.course_lessons (id),
+    scope        varchar not null check (scope in ('COURSE','LESSON')),
+    created_by   uuid not null,
+    created_at   timestamptz not null default now(),
+    comment      text null,
+    payload_json text not null
+);
