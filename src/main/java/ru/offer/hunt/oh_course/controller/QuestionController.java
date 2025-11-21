@@ -41,5 +41,4 @@ public class QuestionController {
         return service.createDetailedAnswer(pageID, request);
     }
 
-
 }

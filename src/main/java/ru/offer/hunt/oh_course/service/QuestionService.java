@@ -31,7 +31,7 @@ public class QuestionService {
     private final QuestionOptionMapper questionOptionMapper;
     private final LessonPageRepository lessonPageRepository;
 
-    private int MAX_SIZE = 1000000;
+    private final static Integer MAX_SIZE = 1000000;
 
     @Transactional(readOnly = true)
     public QuestionDto get(UUID id) {
@@ -47,14 +47,14 @@ public class QuestionService {
 
         // Проверяем существование страницы урока
         if (!lessonPageRepository.existsById(pageId)) {
-            log.warn("Question save failed - lesson page not found, pageId={}", pageId);
+            log.error("Question create failed - lesson page not found, pageId={}", pageId);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lesson Page not found");
         }
 
         // Проверяем наличие хотя бы одного правильного ответа
         boolean correctAnswer = optionals.stream().anyMatch(QuestionOptionUpsertRequest::getCorrect);
         if (!correctAnswer) {
-            log.warn("Question save failed - no correct answer, pageId={}", pageId);
+            log.error("Question create failed - no correct answer, pageId={}", pageId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ни один из вариантов ответа не помечен как правильный");
         }
 
@@ -65,7 +65,7 @@ public class QuestionService {
         try {
             question = questionRepository.saveAndFlush(question);
         } catch (Exception ex) {
-            log.error("Question  save failed - server error, pageId={}", pageId, ex);
+            log.error("Question  create failed - server error, pageId={}", pageId, ex);
             throw new ResponseStatusException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "Не удалось сохранить тест. Попробуйте позже"
@@ -110,17 +110,17 @@ public class QuestionService {
     @Transactional
     public QuestionDto  createDetailedAnswer(UUID pageId, QuestionUpsertRequest request){
         if (!lessonPageRepository.existsById(pageId)) {
-            log.warn("Detailed Question save failed - lesson page not found, pageId={}", pageId);
+            log.error("Detailed Question create failed - lesson page not found, pageId={}", pageId);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lesson Page not found");
         }
 
         if (request.getCorrectAnswer().isBlank()) {
-            log.warn("Detailed Question save failed - no correct answer, pageId={}", pageId);
+            log.error("Detailed Question create failed - no correct answer, pageId={}", pageId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Нет варианта ответа");
         }
 
         if(request.getType() != TEXT_INPUT){
-            log.warn("Detailed Question save failed - wrong type, pageId={}", pageId);
+            log.error("Detailed Question create failed - wrong type, pageId={}", pageId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Поле для ответа не определено");
         }
 
