@@ -7,11 +7,15 @@ spring:
         hibernate:
         ddl-auto: none
     flyway:
-        enabled: false
+        enabled: true
         locations: classpath:db/migration
         schemas: course
         baseline-on-migrate: true
-
+    profiles:
+      active: local
+logging:
+  level:
+    org.springframework.security: DEBUG
 
 # JWT env-vars (read in SecurityConfig)
 app:

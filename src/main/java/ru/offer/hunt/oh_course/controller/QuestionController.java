@@ -4,9 +4,11 @@ package ru.offer.hunt.oh_course.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.offer.hunt.oh_course.model.dto.*;
+import ru.offer.hunt.oh_course.security.SecurityUtils;
 import ru.offer.hunt.oh_course.service.QuestionService;
 
 import java.util.List;
@@ -31,14 +33,17 @@ public class QuestionController {
 
     @PostMapping("createWithChoice/{pageId}")
     @ResponseStatus(HttpStatus.CREATED)
-    public QuestionDto create(@PathVariable("pageId") UUID pageID, @RequestBody @Valid QuestionUpsertRequest request, @RequestBody @Valid List<QuestionOptionUpsertRequest> optionals){
-        return service.create(pageID, request, optionals);
+    public QuestionDto create(@PathVariable("pageId") UUID pageID,
+                              @RequestBody @Valid QuestionWithOptionsUpsertRequest req,  JwtAuthenticationToken authentication) {
+        UUID userId = SecurityUtils.getUserId(authentication);
+        return service.create(pageID, req.question(), req.options(), userId);
     }
 
     @PostMapping("createDetailedAnswer/{questionId}")
     @ResponseStatus(HttpStatus.CREATED)
-    public QuestionDto createDetailedAnswer(@PathVariable("pageId") UUID pageID, @RequestBody @Valid QuestionUpsertRequest request, @RequestBody @Valid QuestionOptionUpsertRequest optional){
-        return service.createDetailedAnswer(pageID, request);
+    public QuestionDto createDetailedAnswer(@PathVariable("questionId") UUID pageID, @RequestBody @Valid QuestionUpsertRequest request, JwtAuthenticationToken authentication){
+        UUID userId = SecurityUtils.getUserId(authentication);
+        return service.createDetailedAnswer(pageID, request, userId);
     }
 
 }
