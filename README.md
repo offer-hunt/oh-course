@@ -27,3 +27,8 @@ docker-compose down
 
 *   **Репозиторий на Docker Hub:** `https://hub.docker.com/r/termoler/oh-course`
 *   **Имя образа:** `termoler/oh-course:latest`
+
+## 3. Тестирование через Swagger
+
+Запустите приложение и перейдите по ссылке:
+**[http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)**

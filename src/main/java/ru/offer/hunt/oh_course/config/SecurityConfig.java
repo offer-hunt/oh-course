@@ -39,22 +39,19 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
-                .authorizeHttpRequests(
-                        auth ->
-                                auth.requestMatchers("/actuator/health", "/actuator/info")
-                                        .permitAll()
-                                        .requestMatchers(HttpMethod.GET, "/api/secure/ping")
-                                        .hasAuthority("SCOPE_course.read")
-                                        .anyRequest()
-                                        .authenticated())
-                .oauth2ResourceServer(
-                        oauth2 ->
-                                oauth2.jwt(
-                                        jwt ->
-                                                jwt.decoder(jwtDecoder()).jwtAuthenticationConverter(jwtAuthConverter())));
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/secure/ping").hasAuthority("SCOPE_course.read")
+                        .anyRequest().authenticated()
+                )
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->
+                        jwt.decoder(jwtDecoder())
+                                .jwtAuthenticationConverter(jwtAuthConverter())
+                ));
+
         return http.build();
     }
-
     @Bean
     JwtDecoder jwtDecoder() {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUrl).build();

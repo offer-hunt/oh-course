@@ -24,6 +24,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server:3.3.2")
     implementation("org.springframework.boot:spring-boot-starter-jdbc:3.3.2")
 
+    implementation ("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
+
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.projectlombok:lombok:1.18.38")
     implementation("org.springframework.boot:spring-boot-starter-validation")

@@ -27,7 +27,6 @@ import java.time.OffsetDateTime;
 @Builder
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class CourseMember {
-
     @EmbeddedId
     @EqualsAndHashCode.Include
     private CourseMemberId id;
