@@ -41,6 +41,8 @@ dependencies {
     // --- JWT / JOSE ---
     implementation("com.nimbusds:nimbus-jose-jwt:9.37.3")
 
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+
     // --- Testing ---
     testImplementation("org.springframework.boot:spring-boot-starter-test:3.3.2")
     testImplementation("org.springframework.security:spring-security-test:6.3.2")
