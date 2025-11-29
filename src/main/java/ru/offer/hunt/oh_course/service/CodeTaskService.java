@@ -72,7 +72,7 @@ public class CodeTaskService {
                                     "Не удалось найти урок для страницы кодового задания"
                             ));
 
-            UUID courseId = lesson.getCourseId();
+            UUID courseId = lesson.getCourse().getId();
             if (courseId == null) {
                 throw new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR,
