@@ -27,3 +27,16 @@ docker-compose down
 
 *   **Репозиторий на Docker Hub:** `https://hub.docker.com/r/termoler/oh-course`
 *   **Имя образа:** `termoler/oh-course:latest`
+
+## 3. Тестирование через Swagger
+
+Соберите и запустите сервис под профилем local:
+
+```bash
+./gradlew clean build
+java -jar build/libs/oh-course-0.0.1.jar --spring.profiles.active=local
+```
+
+Перейдите по ссылке:
+
+**[http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)**

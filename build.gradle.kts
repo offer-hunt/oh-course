@@ -41,7 +41,6 @@ dependencies {
     // --- JWT / JOSE ---
     implementation("com.nimbusds:nimbus-jose-jwt:9.37.3")
 
-    // --- SWAGGER ---
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 
     // --- Testing ---

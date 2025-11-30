@@ -11,8 +11,7 @@ spring:
         locations: classpath:db/migration
         schemas: course
         baseline-on-migrate: true
-    profiles:
-      active: local
+
 logging:
   level:
     org.springframework.security: DEBUG
