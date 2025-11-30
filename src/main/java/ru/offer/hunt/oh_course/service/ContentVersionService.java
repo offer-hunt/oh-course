@@ -186,7 +186,7 @@ public class ContentVersionService {
                     .orElseThrow(() -> new ResponseStatusException(
                             HttpStatus.NOT_FOUND, "Урок не найден"));
 
-            UUID courseId = lesson.getCourseId();
+            UUID courseId = lesson.getCourse().getId();
             ensureCourseAdmin(courseId, userId);
 
             LessonVersionPayload payload = LessonVersionPayload.fromEntity(lesson);
@@ -230,7 +230,7 @@ public class ContentVersionService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Урок не найден"));
 
-        UUID courseId = lesson.getCourseId();
+        UUID courseId = lesson.getCourse().getId();
         ensureCourseAdmin(courseId, userId);
 
         List<ContentVersion> versions = contentVersionRepository
@@ -249,7 +249,7 @@ public class ContentVersionService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Урок не найден"));
 
-        UUID courseId = lesson.getCourseId();
+        UUID courseId = lesson.getCourse().getId();
         ensureCourseAdmin(courseId, userId);
 
         ContentVersion version = contentVersionRepository.findById(versionId)
@@ -276,7 +276,7 @@ public class ContentVersionService {
                     .orElseThrow(() -> new ResponseStatusException(
                             HttpStatus.NOT_FOUND, "Урок не найден"));
 
-            UUID courseId = lesson.getCourseId();
+            UUID courseId = lesson.getCourse().getId();
             ensureCourseAdmin(courseId, userId);
 
             ContentVersion version = contentVersionRepository.findById(versionId)

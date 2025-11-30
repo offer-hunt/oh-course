@@ -6,6 +6,7 @@ import ru.offer.hunt.oh_course.model.enums.AccessType;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -30,4 +31,8 @@ public class CourseDto {
     private OffsetDateTime archivedAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+    private List<TagRefDto> tags;
+    private Integer estimatedDurationHours;
+    private Integer membersCount;
+    private List<LessonDto> lessons;
 }

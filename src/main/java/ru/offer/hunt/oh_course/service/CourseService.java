@@ -1,14 +1,9 @@
 package ru.offer.hunt.oh_course.service;
 
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,21 +12,32 @@ import ru.offer.hunt.oh_course.model.dto.CourseDto;
 import ru.offer.hunt.oh_course.model.dto.CourseUpsertRequest;
 import ru.offer.hunt.oh_course.model.entity.Course;
 import ru.offer.hunt.oh_course.model.entity.CourseMember;
-import ru.offer.hunt.oh_course.model.entity.CourseTag;
 import ru.offer.hunt.oh_course.model.entity.Lesson;
-import ru.offer.hunt.oh_course.model.entity.TagRef;
 import ru.offer.hunt.oh_course.model.enums.AccessType;
 import ru.offer.hunt.oh_course.model.enums.CourseMemberRole;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 import ru.offer.hunt.oh_course.model.id.CourseMemberId;
-import ru.offer.hunt.oh_course.model.id.CourseTagId;
 import ru.offer.hunt.oh_course.model.mapper.CourseMapper;
+import ru.offer.hunt.oh_course.model.mapper.LessonMapper;
 import ru.offer.hunt.oh_course.model.repository.CourseMemberRepository;
 import ru.offer.hunt.oh_course.model.repository.CourseRepository;
-import ru.offer.hunt.oh_course.model.repository.CourseTagRepository;
 import ru.offer.hunt.oh_course.model.repository.LessonPageRepository;
 import ru.offer.hunt.oh_course.model.repository.LessonRepository;
-import ru.offer.hunt.oh_course.model.repository.TagRefRepository;
+import ru.offer.hunt.oh_course.model.search.CourseFilter;
+
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withAuthorId;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withDurations;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withLanguages;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withLevels;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withQuery;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withStatus;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withTechnologies;
 
 @Service
 @RequiredArgsConstructor
@@ -46,11 +52,30 @@ public class CourseService {
 
     private final CourseRepository courseRepository;
     private final CourseMemberRepository courseMemberRepository;
-    private final TagRefRepository courseTagRefRepository;
-    private final CourseTagRepository courseTagRepository;
     private final CourseMapper courseMapper;
     private final LessonRepository lessonRepository;
     private final LessonPageRepository lessonPageRepository;
+    private final TagService tagService;
+    private final LessonMapper lessonMapper;
+
+    public List<CourseDto> getPublishedCourses(CourseFilter courseFilter) {
+        Specification<Course> spec = Specification.where(withStatus(CourseStatus.PUBLISHED))
+                .and(withAuthorId(courseFilter.getAuthorId()))
+                .and(withLanguages(courseFilter.getLanguage()))
+                .and(withTechnologies(courseFilter.getTechnologies()))
+                .and(withLevels(courseFilter.getLevel()))
+                .and(withDurations(courseFilter.getDuration()))
+                .and(withQuery(courseFilter.getQuery()));
+
+        return courseRepository.findAll(spec).stream()
+                .map(c -> courseMapper.toDto(c, courseMemberRepository, lessonRepository, lessonMapper))
+                .toList();
+    }
+
+    public CourseDto getPublishedCourseBySlug(String slug) {
+        Course course = courseRepository.findBySlugAndStatus(slug, CourseStatus.PUBLISHED);
+        return courseMapper.toDto(course, courseMemberRepository, lessonRepository, lessonMapper);
+    }
 
     @Transactional
     public CourseDto createCourse(UUID authorId, CourseUpsertRequest request) {
@@ -60,15 +85,21 @@ public class CourseService {
         try {
             validateCourseData(request);
 
-            Course course = buildCourseEntity(authorId, request, now);
-            Course savedCourse = courseRepository.save(course);
+            Course course = courseMapper.toEntity(request, tagService);
 
-            createOwnerMembership(savedCourse.getId(), authorId, now);
-            syncCourseTags(savedCourse.getId(), request.getTags(), now);
+            course.setId(UUID.randomUUID());
+            course.setAuthorId(authorId);
+            course.setStatus(CourseStatus.DRAFT);
+            course.setVersion(1);
+            course.setRequiresEntitlement(false);
+            course.setCreatedAt(now);
+            course.setUpdatedAt(now);
 
-            log.info("Course created: id={}, authorId={}", savedCourse.getId(), authorId);
+            courseRepository.save(course);
 
-            return courseMapper.toDto(savedCourse);
+            createOwnerMembership(course.getId(), authorId, now);
+
+            return courseMapper.toDto(course, courseMemberRepository, lessonRepository, lessonMapper);
 
         } catch (ResponseStatusException ex) {
             throw ex;
@@ -144,7 +175,7 @@ public class CourseService {
 
             log.info("Course published: courseId={}, userId={}", courseId, userId);
 
-            return courseMapper.toDto(saved);
+            return courseMapper.toDto(course, courseMemberRepository, lessonRepository, lessonMapper);
 
         } catch (ResponseStatusException e) {
             throw e;
@@ -249,23 +280,6 @@ public class CourseService {
         }
     }
 
-    private Course buildCourseEntity(UUID authorId,
-                                     CourseUpsertRequest request,
-                                     OffsetDateTime now) {
-
-        Course course = courseMapper.toEntity(request);
-
-        course.setId(UUID.randomUUID());
-        course.setAuthorId(authorId);
-        course.setStatus(CourseStatus.DRAFT);
-        course.setVersion(1);
-        course.setRequiresEntitlement(false);
-        course.setCreatedAt(now);
-        course.setUpdatedAt(now);
-
-        return course;
-    }
-
     private void createOwnerMembership(UUID courseId,
                                        UUID authorId,
                                        OffsetDateTime now) {
@@ -280,43 +294,6 @@ public class CourseService {
                 .build();
 
         courseMemberRepository.save(owner);
-    }
-
-    private void syncCourseTags(UUID courseId,
-                                List<String> tags,
-                                OffsetDateTime now) {
-        if (tags == null || tags.isEmpty()) {
-            return;
-        }
-
-        List<String> normalized = tags.stream()
-                .map(tag -> tag == null ? "" : tag.trim())
-                .filter(tag -> !tag.isEmpty())
-                .map(tag -> tag.toLowerCase(Locale.ROOT))
-                .distinct()
-                .toList();
-
-        List<CourseTag> links = new ArrayList<>();
-
-        for (String tagName : normalized) {
-            TagRef tagRef = courseTagRefRepository
-                    .findByNameIgnoreCase(tagName)
-                    .orElseGet(() -> {
-                        TagRef ref = new TagRef();
-                        ref.setId(UUID.randomUUID());
-                        ref.setName(tagName);
-                        ref.setCreatedAt(now);
-                        return courseTagRefRepository.save(ref);
-                    });
-
-            CourseTagId linkId = new CourseTagId(courseId, tagRef.getId());
-            CourseTag link = new CourseTag();
-            link.setId(linkId);
-
-            links.add(link);
-        }
-
-        courseTagRepository.saveAll(links);
     }
 
     private boolean isSlugUniqueViolation(DataIntegrityViolationException ex) {
