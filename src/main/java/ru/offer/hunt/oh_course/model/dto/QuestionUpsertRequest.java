@@ -10,10 +10,10 @@ import ru.offer.hunt.oh_course.model.enums.QuestionType;
 @Setter
 public class QuestionUpsertRequest {
 
-    @NotNull
+    @NotNull(message = "Тип вопроса не должен быть пустым")
     private QuestionType type;
 
-    @NotBlank
+    @NotBlank(message = "Текст вопроса не должен быть пустым")
     private String text;
 
     private String correctAnswer;
@@ -22,6 +22,6 @@ public class QuestionUpsertRequest {
 
     private Integer points;
 
-    @NotNull
+    @NotNull(message = "Порядок вопроса не должен быть пустым")
     private Integer sortOrder;
 }
