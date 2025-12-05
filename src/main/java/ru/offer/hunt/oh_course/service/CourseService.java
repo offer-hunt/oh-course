@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,25 +15,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import ru.offer.hunt.oh_course.model.dto.CourseDto;
-import ru.offer.hunt.oh_course.model.dto.CourseUpsertRequest;
-import ru.offer.hunt.oh_course.model.entity.Course;
-import ru.offer.hunt.oh_course.model.entity.CourseMember;
-import ru.offer.hunt.oh_course.model.entity.CourseTag;
-import ru.offer.hunt.oh_course.model.entity.Lesson;
-import ru.offer.hunt.oh_course.model.entity.TagRef;
+import ru.offer.hunt.oh_course.model.dto.*;
+import ru.offer.hunt.oh_course.model.entity.*;
 import ru.offer.hunt.oh_course.model.enums.AccessType;
 import ru.offer.hunt.oh_course.model.enums.CourseMemberRole;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 import ru.offer.hunt.oh_course.model.id.CourseMemberId;
 import ru.offer.hunt.oh_course.model.id.CourseTagId;
-import ru.offer.hunt.oh_course.model.mapper.CourseMapper;
-import ru.offer.hunt.oh_course.model.repository.CourseMemberRepository;
-import ru.offer.hunt.oh_course.model.repository.CourseRepository;
-import ru.offer.hunt.oh_course.model.repository.CourseTagRepository;
-import ru.offer.hunt.oh_course.model.repository.LessonPageRepository;
-import ru.offer.hunt.oh_course.model.repository.LessonRepository;
-import ru.offer.hunt.oh_course.model.repository.TagRefRepository;
+import ru.offer.hunt.oh_course.model.mapper.*;
+import ru.offer.hunt.oh_course.model.repository.*;
 
 @Service
 @RequiredArgsConstructor
@@ -51,6 +43,18 @@ public class CourseService {
     private final CourseMapper courseMapper;
     private final LessonRepository lessonRepository;
     private final LessonPageRepository lessonPageRepository;
+    private final LessonMapper lessonMapper;
+    private final LessonPageMapper lessonPageMapper;
+
+    private final MethodicalPageContentRepository methodicalPageContentRepository;
+    private final QuestionRepository questionRepository;
+    private final QuestionOptionRepository questionOptionRepository;
+    private final QuestionTestCaseRepository questionTestCaseRepository;
+
+    private final QuestionMapper questionMapper;
+    private final QuestionOptionMapper questionOptionMapper;
+    private final QuestionTestCaseMapper questionTestCaseMapper;
+    private final MethodicalPageContentMapper methodicalPageContentMapper;
 
     @Transactional
     public CourseDto createCourse(UUID authorId, CourseUpsertRequest request) {
@@ -158,6 +162,102 @@ public class CourseService {
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "Не удалось опубликовать курс. Попробуйте позже.",
                     e);
+        }
+    }
+    @Transactional
+    public CourseGetDto getCourseDto(UUID courseId, UUID userId){
+
+        try{
+            if(!checkUserPermissions(courseId, userId)){
+                log.error("User ID = {} opened course structure Course ID = {} - access error", userId, courseId);
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Курс недоступен");
+
+            }
+
+            Course course = courseRepository.findById(courseId).orElseThrow(
+                    () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
+
+            List<Lesson> lessons = lessonRepository.findByCourseId(courseId);
+            List<LessonWithPagesDto> lessonWithPagesDto = new ArrayList<>();
+            for(Lesson ls : lessons){
+                lessonWithPagesDto.add(new LessonWithPagesDto(lessonMapper.toDto(ls), lessonPageRepository.findByLessonId(ls.getId()).stream().map(lessonPageMapper::toDto).collect(Collectors.toList())));
+            }
+
+            return new CourseGetDto(courseMapper.toDto(course), lessonWithPagesDto);
+
+
+        }catch (ResponseStatusException e) {
+            throw e;
+        }catch (Exception ex) {
+            log.error("Course get structure failed - server error, courseId={}", courseId, ex);
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Не удалось выдать страницу. Попробуйте позже."
+            );
+        }
+
+    }
+
+
+    public PageDataDto getPageDataDto(UUID userId, UUID pageId){
+        try{
+            LessonPage page = lessonPageRepository.findById(pageId).orElseThrow(
+                    () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Страница не найдена не найден"));
+
+
+            /// Тут должна быть проверка прав на страницу, но я не хочу поднимать все БД ради выдачи одной странички, это будет слишком медленно
+            Lesson lesson = lessonRepository.findById(page.getLessonId()).orElseThrow(
+                    () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Урок не найден"));
+
+            Course course = courseRepository.findById(lesson.getId()).orElseThrow(
+                    () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
+
+            if(!checkUserPermissions(course.getId(), userId)){
+                log.error("User ID = {} opened course structure Course ID = {} - access error when download page ID = {}", userId, course.getId(), pageId);
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Курс недоступен");
+
+            }
+
+            MethodicalPageContent methodicalPageContent = methodicalPageContentRepository.findById(pageId).orElse(null);
+            List<Question> questions = questionRepository.findByPageId(pageId);
+            List<QuestionWithAnswersDto> questionWithAnswersDtoList = new ArrayList<>();
+            List<QuestionOptionDto> questionOptionDtoList;
+            List<QuestionTestCaseDto> questionTestCaseDtoList;
+
+            for(Question que : questions){
+                /// Тут можно оптимизировать и посмотреть на тип вопроса и не делать лишние поиски, я так и сделал
+                questionOptionDtoList = null;
+                questionTestCaseDtoList = null;
+                switch (que.getType()){
+                    case CODE:
+                        questionTestCaseDtoList = questionTestCaseRepository.findByQuestionId(que.getId()).stream().map(questionTestCaseMapper::toDto).collect(Collectors.toList());
+                        break;
+                    case SINGLE_CHOICE:
+                    case MULTIPLE_CHOICE:
+                        questionOptionDtoList = questionOptionRepository.findByQuestionIdOrderBySortOrderAsc(que.getId()).stream().map(questionOptionMapper::toDto).collect(Collectors.toList());
+                        break;
+                    case TEXT_INPUT:
+                        break;
+                }
+
+                questionWithAnswersDtoList.add(new QuestionWithAnswersDto(questionMapper.toDto(que), questionOptionDtoList, questionTestCaseDtoList));
+
+//                questionWithAnswersDtoList.add(new QuestionWithAnswersDto(questionMapper.toDto(que),
+//                        questionOptionRepository.findByQuestionIdOrderBySortOrderAsc(que.getId()).stream().map(questionOptionMapper::toDto).collect(Collectors.toList()),
+//                        questionTestCaseRepository.findByQuestionId(que.getId()).stream().map(questionTestCaseMapper::toDto).collect(Collectors.toList())));
+            }
+
+            return new PageDataDto(methodicalPageContentMapper.toDto(methodicalPageContent), questionWithAnswersDtoList);
+
+
+        }catch (ResponseStatusException e) {
+            throw e;
+        }catch (Exception ex) {
+            log.error("page data get  failed - server error, pageId={}", pageId, ex);
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Не удалось выдать страницу. Попробуйте позже."
+            );
         }
     }
 
@@ -386,6 +486,12 @@ public class CourseService {
                     HttpStatus.FORBIDDEN,
                     "Недостаточно прав для публикации курса");
         }
+    }
+
+    private boolean checkUserPermissions(UUID courseId, UUID userId){
+        /// Заглушка пока что.
+
+        return true;
     }
 
 

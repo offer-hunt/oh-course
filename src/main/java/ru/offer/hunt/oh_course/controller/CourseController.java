@@ -8,7 +8,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
 import ru.offer.hunt.oh_course.model.dto.CourseDto;
+import ru.offer.hunt.oh_course.model.dto.CourseGetDto;
 import ru.offer.hunt.oh_course.model.dto.CourseUpsertRequest;
+import ru.offer.hunt.oh_course.model.dto.PageDataDto;
 import ru.offer.hunt.oh_course.security.SecurityUtils;
 import ru.offer.hunt.oh_course.service.CourseService;
 
@@ -40,5 +42,22 @@ public class CourseController {
 
         UUID userId = SecurityUtils.getUserId(authentication);
         return courseService.publishCourse(courseId, userId);
+    }
+
+
+    @GetMapping("/get/{courseId}")
+    public CourseGetDto getCourse(
+            @PathVariable("courseId") UUID courseId,
+            JwtAuthenticationToken authentication) {
+
+        UUID userId = SecurityUtils.getUserId(authentication);
+        return courseService.getCourseDto(courseId, userId);
+    }
+
+
+    @GetMapping("/getDataPage/{pageId}")
+    public PageDataDto getDataPage(@PathVariable("pageId") UUID pageId, JwtAuthenticationToken authentication) {
+        UUID userId = SecurityUtils.getUserId(authentication);
+        return courseService.getPageDataDto(userId, pageId);
     }
 }
