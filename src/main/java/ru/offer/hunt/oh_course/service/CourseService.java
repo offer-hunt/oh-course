@@ -6,14 +6,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.offer.hunt.oh_course.exception.StatsServiceConnectionException;
 import ru.offer.hunt.oh_course.model.dto.CourseDto;
+import ru.offer.hunt.oh_course.model.dto.CoursePreviewDto;
+import ru.offer.hunt.oh_course.model.dto.LessonDto;
+import ru.offer.hunt.oh_course.model.dto.LessonPreviewDto;
 import ru.offer.hunt.oh_course.model.entity.*;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 import ru.offer.hunt.oh_course.model.enums.QuestionType;
+import ru.offer.hunt.oh_course.model.id.CourseTagId;
 import ru.offer.hunt.oh_course.model.mapper.*;
 import ru.offer.hunt.oh_course.model.repository.*;
 import ru.offer.hunt.oh_course.model.enums.PageType;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,9 +33,158 @@ public class CourseService {
     private final QuestionRepository questionRepository;
     private final QuestionOptionRepository questionOptionRepository;
     private final QuestionTestCaseRepository questionTestCaseRepository;
+    private final CourseTagRepository courseTagRepository;
+    private final TagRefRepository tagRefRepository;
 
     private final CourseMapper courseMapper;
     private final CloningMapper cloningMapper;
+    private final LessonMapper lessonMapper;
+    private final LessonPageMapper lessonPageMapper;
+
+    @Transactional
+    public void archiveCourse(UUID courseId, UUID userId) {
+        try {
+            Course course = getCourseWithAuthCheck(courseId, userId);
+
+            if (course.getStatus() != CourseStatus.PUBLISHED) {
+                log.warn("Attempt to archive non-published course. ID: {}", courseId);
+                throw new IllegalStateException("Архивировать можно только опубликованный курс");
+            }
+
+            course.setStatus(CourseStatus.ARCHIVED);
+            course.setArchivedAt(OffsetDateTime.now());
+            course.setUpdatedAt(OffsetDateTime.now());
+            courseRepository.save(course);
+
+            log.info("Course archived successfully. ID: {}", courseId);
+
+        } catch (Exception e) {
+            log.error("Course archivation failed - server error. ID: {}", courseId, e);
+            throw e;
+        }
+    }
+
+    @Transactional
+    public void deleteCourse(UUID courseId, UUID userId) {
+        try {
+            Course course = getCourseWithAuthCheck(courseId, userId);
+            courseRepository.delete(course);
+
+            log.info("Course deleted successfully. ID: {}", courseId);
+
+        } catch (Exception e) {
+            log.error("Course deletion failed - server error. ID: {}", courseId, e);
+            throw e;
+        }
+    }
+
+    @Transactional
+    public void addTags(UUID courseId, UUID userId, List<UUID> tagIds) {
+        try {
+            getCourseWithAuthCheck(courseId, userId);
+
+            long currentTagsCount = courseTagRepository.findByIdCourseId(courseId).size();
+            if (currentTagsCount + tagIds.size() > 10) {
+                log.warn("Tags limit exceeded. CourseID: {}", courseId);
+                throw new IllegalArgumentException("Количество тегов слишком большое (максимум 10)");
+            }
+
+            List<TagRef> existingTags = tagRefRepository.findAllById(tagIds);
+            if (existingTags.size() != tagIds.size()) {
+                throw new IllegalArgumentException("Некорректные ID тегов");
+            }
+
+            for (UUID tagId : tagIds) {
+                CourseTagId id = new CourseTagId(courseId, tagId);
+                if (!courseTagRepository.existsById(id)) {
+                    CourseTag courseTag = new CourseTag();
+                    courseTag.setId(id);
+                    courseTagRepository.save(courseTag);
+                }
+            }
+
+            log.info("Tags added. CourseID: {}, Tags: {}", courseId, tagIds);
+
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Tags add failed - server error. CourseID: {}", courseId, e);
+            throw new RuntimeException("Не удалось добавить теги", e);
+        }
+    }
+
+    @Transactional
+    public void removeTag(UUID courseId, UUID userId, UUID tagId) {
+        try {
+            getCourseWithAuthCheck(courseId, userId);
+
+            List<CourseTag> currentTags = courseTagRepository.findByIdCourseId(courseId);
+            if (currentTags.size() <= 1) {
+                log.warn("Tags limit too low. CourseID: {}", courseId);
+                throw new IllegalArgumentException("Количество тегов слишком маленькое, добавьте хотя бы один тег");
+            }
+
+            CourseTagId id = new CourseTagId(courseId, tagId);
+            if (courseTagRepository.existsById(id)) {
+                courseTagRepository.deleteById(id);
+                log.info("Tags deleted. CourseID: {}, TagID: {}", courseId, tagId);
+            } else {
+                throw new IllegalArgumentException("Тег не найден у данного курса");
+            }
+
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Tags delete failed - server error. CourseID: {}", courseId, e);
+            throw new RuntimeException("Не удалось удалить теги", e);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public CoursePreviewDto getCoursePreview(UUID courseId, UUID userId) {
+        try {
+            Course course = getCourseWithAuthCheck(courseId, userId);
+
+            if (course.getStatus() != CourseStatus.DRAFT) {
+                throw new IllegalStateException("Предпросмотр доступен только для черновиков");
+            }
+
+            CoursePreviewDto preview = new CoursePreviewDto();
+            preview.setCourse(courseMapper.toDto(course));
+
+            List<Lesson> lessons = lessonRepository.findByCourseIdOrderByOrderIndexAsc(courseId);
+            List<LessonPreviewDto> lessonDtos = new ArrayList<>();
+
+            for (Lesson lesson : lessons) {
+                LessonDto baseDto = lessonMapper.toDto(lesson);
+
+                LessonPreviewDto lessonPreviewDto = new LessonPreviewDto();
+
+                lessonPreviewDto.setId(baseDto.getId());
+                lessonPreviewDto.setCourseId(baseDto.getCourseId());
+                lessonPreviewDto.setTitle(baseDto.getTitle());
+                lessonPreviewDto.setDescription(baseDto.getDescription());
+                lessonPreviewDto.setOrderIndex(baseDto.getOrderIndex());
+                lessonPreviewDto.setDurationMin(baseDto.getDurationMin());
+                lessonPreviewDto.setCreatedAt(baseDto.getCreatedAt());
+                lessonPreviewDto.setUpdatedAt(baseDto.getUpdatedAt());
+
+                List<LessonPage> pages = lessonPageRepository.findByLessonIdOrderBySortOrderAsc(lesson.getId());
+                lessonPreviewDto.setPages(pages.stream()
+                        .map(lessonPageMapper::toDto)
+                        .toList());
+
+                lessonDtos.add(lessonPreviewDto);
+            }
+
+            preview.setLessons(lessonDtos);
+            return preview;
+
+        } catch (Exception e) {
+            log.error("Preview failed - server error. ID: {}", courseId, e);
+            throw e;
+        }
+    }
 
     @Transactional
     public CourseDto createDraftFromPublished(
@@ -212,6 +366,17 @@ public class CourseService {
             newCase.setQuestionId(newQId);
             questionTestCaseRepository.save(newCase);
         });
+    }
+
+    private Course getCourseWithAuthCheck(UUID courseId, UUID userId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new IllegalArgumentException("Курс не найден: " + courseId));
+
+        if (!course.getAuthorId().equals(userId)) {
+            log.warn("Unauthorized access attempt. User: {}, Course: {}", userId, courseId);
+            throw new SecurityException("У вас нет прав на редактирование этого курса");
+        }
+        return course;
     }
 
     private boolean isConnectionError(Exception e) {
