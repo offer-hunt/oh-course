@@ -39,6 +39,7 @@ create table if not exists course.course_lessons
     description     text null,
     order_index     int not null,
     duration_min    int null,
+    is_demo         boolean not null default false,
     created_at      timestamptz not null default now(),
     updated_at      timestamptz null
 );
