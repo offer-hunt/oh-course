@@ -1,5 +1,18 @@
 package ru.offer.hunt.oh_course.service;
 
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withAuthorId;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withDurations;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withLanguages;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withLevels;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withQuery;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withStatus;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withTechnologies;
+
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -12,6 +25,7 @@ import ru.offer.hunt.oh_course.model.dto.CourseDto;
 import ru.offer.hunt.oh_course.model.dto.CourseUpsertRequest;
 import ru.offer.hunt.oh_course.model.entity.Course;
 import ru.offer.hunt.oh_course.model.entity.CourseMember;
+import ru.offer.hunt.oh_course.model.entity.CourseStats;
 import ru.offer.hunt.oh_course.model.entity.Lesson;
 import ru.offer.hunt.oh_course.model.enums.AccessType;
 import ru.offer.hunt.oh_course.model.enums.CourseMemberRole;
@@ -21,23 +35,10 @@ import ru.offer.hunt.oh_course.model.mapper.CourseMapper;
 import ru.offer.hunt.oh_course.model.mapper.LessonMapper;
 import ru.offer.hunt.oh_course.model.repository.CourseMemberRepository;
 import ru.offer.hunt.oh_course.model.repository.CourseRepository;
+import ru.offer.hunt.oh_course.model.repository.CourseStatsRepository;
 import ru.offer.hunt.oh_course.model.repository.LessonPageRepository;
 import ru.offer.hunt.oh_course.model.repository.LessonRepository;
 import ru.offer.hunt.oh_course.model.search.CourseFilter;
-
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
-
-import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withAuthorId;
-import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withDurations;
-import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withLanguages;
-import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withLevels;
-import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withQuery;
-import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withStatus;
-import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withTechnologies;
 
 @Service
 @RequiredArgsConstructor
@@ -52,6 +53,7 @@ public class CourseService {
 
     private final CourseRepository courseRepository;
     private final CourseMemberRepository courseMemberRepository;
+    private final CourseStatsRepository courseStatsRepository;
     private final CourseMapper courseMapper;
     private final LessonRepository lessonRepository;
     private final LessonPageRepository lessonPageRepository;
@@ -59,27 +61,37 @@ public class CourseService {
     private final LessonMapper lessonMapper;
 
     public List<CourseDto> getPublishedCourses(CourseFilter courseFilter) {
+        CourseFilter f = courseFilter == null ? new CourseFilter() : courseFilter;
+
         Specification<Course> spec = Specification.where(withStatus(CourseStatus.PUBLISHED))
-                .and(withAuthorId(courseFilter.getAuthorId()))
-                .and(withLanguages(courseFilter.getLanguage()))
-                .and(withTechnologies(courseFilter.getTechnologies()))
-                .and(withLevels(courseFilter.getLevel()))
-                .and(withDurations(courseFilter.getDuration()))
-                .and(withQuery(courseFilter.getQuery()));
+                .and(withAuthorId(f.getAuthorId()))
+                .and(withLanguages(f.getLanguage()))
+                .and(withTechnologies(f.getTechnologies()))
+                .and(withLevels(f.getLevel()))
+                .and(withDurations(f.getDuration()))
+                .and(withQuery(f.getQuery()));
 
         return courseRepository.findAll(spec).stream()
-                .map(c -> courseMapper.toDto(c, courseMemberRepository, lessonRepository, lessonMapper))
+                .map(c -> courseMapper.toDto(c, lessonRepository, lessonMapper, courseStatsRepository))
                 .toList();
     }
 
-    public CourseDto getPublishedCourseBySlug(String slug) {
-        Course course = courseRepository.findBySlugAndStatus(slug, CourseStatus.PUBLISHED);
-        return courseMapper.toDto(course, courseMemberRepository, lessonRepository, lessonMapper);
+    public CourseDto getPublishedCourseBySlug(String slug, String inviteCode) {
+        Course course = courseRepository.findBySlugAndStatus(slug, CourseStatus.PUBLISHED)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
+
+        if (course.getAccessType() == AccessType.PRIVATE_LINK) {
+            String expected = course.getInviteCode();
+            if (expected == null || inviteCode == null || !expected.equals(inviteCode)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Доступ к этому курсу ограничен");
+            }
+        }
+
+        return courseMapper.toDto(course, lessonRepository, lessonMapper, courseStatsRepository);
     }
 
     @Transactional
     public CourseDto createCourse(UUID authorId, CourseUpsertRequest request) {
-
         OffsetDateTime now = OffsetDateTime.now();
 
         try {
@@ -97,9 +109,20 @@ public class CourseService {
 
             courseRepository.save(course);
 
+            // OWNER membership (Course-RBAC)
             createOwnerMembership(course.getId(), authorId, now);
 
-            return courseMapper.toDto(course, courseMemberRepository, lessonRepository, lessonMapper);
+            // stats row (чтобы membersCount не был "null" и всегда был источник истины)
+            CourseStats stats = CourseStats.builder()
+                    .courseId(course.getId())
+                    .enrollments(0)
+                    .avgCompletion(java.math.BigDecimal.ZERO)
+                    .avgRating(java.math.BigDecimal.ZERO)
+                    .updatedAt(now)
+                    .build();
+            courseStatsRepository.save(stats);
+
+            return courseMapper.toDto(course, lessonRepository, lessonMapper, courseStatsRepository);
 
         } catch (ResponseStatusException ex) {
             throw ex;
@@ -133,37 +156,26 @@ public class CourseService {
             Course course =
                     courseRepository
                             .findById(courseId)
-                            .orElseThrow(
-                                    () ->
-                                            new ResponseStatusException(
-                                                    HttpStatus.NOT_FOUND, "Курс не найден"));
+                            .orElseThrow(() ->
+                                    new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
 
-            // только OWNER/ADMIN могут публиковать
             ensureCourseAdmin(course.getId(), userId);
 
-            // уже опубликован / заархивирован
             if (course.getStatus() == CourseStatus.PUBLISHED) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Курс уже опубликован");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Курс уже опубликован");
             }
             if (course.getStatus() == CourseStatus.ARCHIVED) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Заархивированный курс нельзя опубликовать");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Заархивированный курс нельзя опубликовать");
             }
 
-            // Валидация
             List<String> issues = validateCourseReadyForPublication(course);
-
             if (!issues.isEmpty()) {
-                log.warn(
-                        "Course publication failed - requirements not met: courseId={}, issues={}",
-                        courseId,
-                        issues);
-                String message =
-                        "Курс не готов к публикации: " + String.join("; ", issues);
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+                log.warn("Course publication failed - requirements not met: courseId={}, issues={}",
+                        courseId, issues);
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Курс не готов к публикации: " + String.join("; ", issues)
+                );
             }
 
             OffsetDateTime now = OffsetDateTime.now();
@@ -171,20 +183,17 @@ public class CourseService {
             course.setPublishedAt(now);
             course.setUpdatedAt(now);
 
-            Course saved = courseRepository.save(course);
+            courseRepository.save(course);
 
             log.info("Course published: courseId={}, userId={}", courseId, userId);
 
-            return courseMapper.toDto(course, courseMemberRepository, lessonRepository, lessonMapper);
+            return courseMapper.toDto(course, lessonRepository, lessonMapper, courseStatsRepository);
 
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            log.error(
-                    "Course publication failed - server error, courseId={}, userId={}",
-                    courseId,
-                    userId,
-                    e);
+            log.error("Course publication failed - server error, courseId={}, userId={}",
+                    courseId, userId, e);
             throw new ResponseStatusException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "Не удалось опубликовать курс. Попробуйте позже.",
@@ -227,14 +236,10 @@ public class CourseService {
     }
 
     private void validateCover(String coverUrl) {
-        if (coverUrl == null || coverUrl.isBlank()) {
-            return;
-        }
+        if (coverUrl == null || coverUrl.isBlank()) return;
 
         String lower = coverUrl.toLowerCase(Locale.ROOT);
-        boolean ok = lower.endsWith(".jpg")
-                || lower.endsWith(".jpeg")
-                || lower.endsWith(".png");
+        boolean ok = lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
 
         if (!ok) {
             log.warn("Course creation failed - invalid cover: {}", coverUrl);
@@ -246,26 +251,18 @@ public class CourseService {
     }
 
     private void validateTags(List<String> tags) {
-        if (tags == null || tags.isEmpty()) {
-            return;
-        }
+        if (tags == null || tags.isEmpty()) return;
 
         if (tags.size() > TAGS_MAX_COUNT) {
             log.warn("Course creation failed - invalid tags count (size={})", tags.size());
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Не более 10 тегов"
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Не более 10 тегов");
         }
 
         for (String rawTag : tags) {
             String tag = rawTag == null ? "" : rawTag.trim();
             if (tag.length() > TAG_MAX_LEN) {
                 log.warn("Course creation failed - invalid tag: '{}'", tag);
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Тег не длиннее 15 символов"
-                );
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Тег не длиннее 15 символов");
             }
         }
     }
@@ -273,19 +270,12 @@ public class CourseService {
     private void validateAccessType(AccessType accessType) {
         if (accessType == null) {
             log.warn("Course creation failed - accessType is null");
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Тип доступа обязателен"
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Тип доступа обязателен");
         }
     }
 
-    private void createOwnerMembership(UUID courseId,
-                                       UUID authorId,
-                                       OffsetDateTime now) {
-
+    private void createOwnerMembership(UUID courseId, UUID authorId, OffsetDateTime now) {
         CourseMemberId id = new CourseMemberId(courseId, authorId);
-
         CourseMember owner = CourseMember.builder()
                 .id(id)
                 .role(CourseMemberRole.OWNER)
@@ -301,9 +291,7 @@ public class CourseService {
                 ? ex.getMostSpecificCause().getMessage()
                 : ex.getMessage();
 
-        if (message == null) {
-            return false;
-        }
+        if (message == null) return false;
 
         return message.contains("course_courses_slug_key")
                 || message.contains("course_courses_slug_idx")
@@ -313,15 +301,9 @@ public class CourseService {
     private List<String> validateCourseReadyForPublication(Course course) {
         List<String> issues = new ArrayList<>();
 
-        if (course.getTitle() == null || course.getTitle().trim().isEmpty()) {
-            issues.add("Добавьте название курса");
-        }
-        if (course.getDescription() == null || course.getDescription().trim().isEmpty()) {
-            issues.add("Добавьте описание курса");
-        }
-        if (course.getCoverUrl() == null || course.getCoverUrl().trim().isEmpty()) {
-            issues.add("Добавьте обложку");
-        }
+        if (course.getTitle() == null || course.getTitle().trim().isEmpty()) issues.add("Добавьте название курса");
+        if (course.getDescription() == null || course.getDescription().trim().isEmpty()) issues.add("Добавьте описание курса");
+        if (course.getCoverUrl() == null || course.getCoverUrl().trim().isEmpty()) issues.add("Добавьте обложку");
 
         List<Lesson> lessons = lessonRepository.findByCourseId(course.getId());
         if (lessons.isEmpty()) {
@@ -335,17 +317,11 @@ public class CourseService {
             if (lesson.getTitle() == null || lesson.getTitle().trim().isEmpty()) {
                 issues.add("Заполните название урока (id=" + lesson.getId() + ")");
             }
-
             boolean hasPages = lessonPageRepository.existsByLessonId(lesson.getId());
-            if (hasPages) {
-                hasLessonWithContent = true;
-            }
+            if (hasPages) hasLessonWithContent = true;
         }
 
-        if (!hasLessonWithContent) {
-            issues.add("Добавьте хотя бы один урок с содержимым");
-        }
-
+        if (!hasLessonWithContent) issues.add("Добавьте хотя бы один урок с содержимым");
 
         return issues;
     }
@@ -359,11 +335,7 @@ public class CourseService {
 
         if (!allowed) {
             log.warn("Course publish forbidden: courseId={}, userId={}", courseId, userId);
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Недостаточно прав для публикации курса");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Недостаточно прав для публикации курса");
         }
     }
-
-
 }

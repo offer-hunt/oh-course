@@ -57,7 +57,7 @@ public class CodeTaskService {
                 );
             }
 
-            UUID lessonId = page.getLessonId();
+            UUID lessonId = page.getLesson().getId();
             if (lessonId == null) {
                 throw new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR,

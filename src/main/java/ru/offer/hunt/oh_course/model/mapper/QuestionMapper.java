@@ -20,6 +20,7 @@ public interface QuestionMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "useAiCheck", expression = "java(Boolean.TRUE.equals(req.getUseAiCheck()))")
     Question toEntity(UUID pageId, QuestionUpsertRequest req);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
@@ -27,5 +28,6 @@ public interface QuestionMapper {
     @Mapping(target = "pageId", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "useAiCheck", expression = "java(req.getUseAiCheck() == null ? target.isUseAiCheck() : req.getUseAiCheck())")
     void update(@MappingTarget Question target, QuestionUpsertRequest req);
 }

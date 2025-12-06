@@ -58,9 +58,12 @@ public class CourseController {
     }
 
     @GetMapping("/{slug}")
-    public CourseDto getPublishedCourseBySlug(@PathVariable String slug) {
+    public CourseDto getPublishedCourseBySlug(
+            @PathVariable String slug,
+            @RequestParam(value = "inviteCode", required = false) String inviteCode
+    ) {
         log.debug("Get course by slug request: slug='{}'", slug);
-        return courseService.getPublishedCourseBySlug(slug);
+        return courseService.getPublishedCourseBySlug(slug, inviteCode);
     }
 
     @PostMapping

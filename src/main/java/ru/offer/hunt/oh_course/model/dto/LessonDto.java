@@ -17,4 +17,5 @@ public class LessonDto {
     private Integer durationMin;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+    private boolean demo;
 }

@@ -16,7 +16,6 @@ public class CollaboratorNotificationService {
                                        UUID inviterId,
                                        UUID collaboratorId,
                                        String collaboratorEmail) {
-        // Здесь просто логируем; никакой реальной отправки писем.
         log.info(
                 "StubCollaboratorNotificationService: collaborator invite sent. " +
                         "courseId={}, inviterId={}, collaboratorId={}, email={}",

@@ -53,4 +53,7 @@ public class Lesson {
 
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    @Column(name = "is_demo", nullable = false)
+    private boolean demo;
 }
