@@ -18,6 +18,22 @@ public class CourseSpecification {
 
     private static final int DURATION_TOLERANCE_MIN = 120;
 
+    // ограничение по списку courseIds
+    public static Specification<Course> withIds(List<UUID> ids) {
+        return (root, query, cb) -> {
+            if (ids == null || ids.isEmpty()) return cb.disjunction(); // ничего не возвращать
+            return root.get("id").in(ids);
+        };
+    }
+
+    // несколько статусов
+    public static Specification<Course> withStatuses(List<CourseStatus> statuses) {
+        return (root, query, cb) -> {
+            if (statuses == null || statuses.isEmpty()) return null;
+            return root.get("status").in(statuses);
+        };
+    }
+
     public static Specification<Course> withAuthorId(UUID authorId) {
         return (root, query, cb) ->
                 authorId == null ? null : cb.equal(root.get("authorId"), authorId);

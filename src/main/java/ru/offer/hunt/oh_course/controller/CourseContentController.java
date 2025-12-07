@@ -1,6 +1,8 @@
 package ru.offer.hunt.oh_course.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
 
@@ -10,14 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import ru.offer.hunt.oh_course.model.dto.CourseOutlineDto;
 import ru.offer.hunt.oh_course.model.dto.LessonPageDto;
 import ru.offer.hunt.oh_course.model.dto.LessonPageShortDto;
@@ -37,12 +32,18 @@ import ru.offer.hunt.oh_course.service.LessonService;
 @RequiredArgsConstructor
 @Slf4j
 @RequestMapping("/api")
+@Tag(name = "Course content", description = "Публичный демо-контент курса и авторские операции с контентом")
 public class CourseContentController {
 
     private final CourseContentService courseContentService;
     private final LessonService lessonService;
 
-    // 1) Outline: курс + уроки (без страниц)
+    @Operation(
+            summary = "Получить структуру курса (outline) для публичной части",
+            description = """
+                    возвращает список уроков опубликованного курса \
+                    с пометкой demo/locked. Для курсов PRIVATE_LINK требуется корректный inviteCode."""
+    )
     @GetMapping("/courses/{slug}/outline")
     public CourseOutlineDto getCourseOutline(
             @PathVariable String slug,
@@ -53,7 +54,12 @@ public class CourseContentController {
         return courseContentService.getCourseOutline(slug, inviteCode);
     }
 
-    // 2) Страницы урока (только демо)
+    @Operation(
+            summary = "Получить список страниц демо-урока",
+            description = """
+                    Возвращает список страниц только для урока, помеченного как demo. \
+                    Используется для предпросмотра содержания курса в публичной части."""
+    )
     @GetMapping("/lessons/{lessonId}/pages")
     public List<LessonPageShortDto> getDemoLessonPages(
             @PathVariable UUID lessonId,
@@ -63,7 +69,13 @@ public class CourseContentController {
         return courseContentService.getDemoLessonPages(lessonId, inviteCode);
     }
 
-    // 3) Просмотр страницы (read-only + без секретов)
+    @Operation(
+            summary = "Просмотр содержимого демо-страницы",
+            description = """
+                    Сценарий демо-страницы курса: \
+                    возвращает теоретический контент или вопросы без правильных ответов, \
+                    только в режиме read-only, плюс CTA на запись на курс."""
+    )
     @GetMapping("/pages/{pageId}/view")
     public PageViewDto getDemoPageView(
             @PathVariable UUID pageId,
@@ -73,7 +85,12 @@ public class CourseContentController {
         return courseContentService.getDemoPageView(pageId, inviteCode);
     }
 
-    // 4) Создание страниц урока
+    @Operation(
+            summary = "Создать страницу урока",
+            description = """
+                    Авторский сценарий: добавляет новую страницу (THEORY/TEST/CODE_TASK) в указанный урок. \
+                    Доступно только OWNER/ADMIN курса; запрещено для архивированных курсов."""
+    )
     @PostMapping("/lessons/{lessonId}/pages")
     @ResponseStatus(HttpStatus.CREATED)
     public LessonPageDto createLessonPage(
@@ -86,7 +103,12 @@ public class CourseContentController {
         return lessonService.createLessonPage(lessonId, userId, req);
     }
 
-    // 5.1 Upsert THEORY контента
+    @Operation(
+            summary = "Создать/обновить методический контент THEORY-страницы",
+            description = """
+                    Авторский сценарий: создаёт или обновляет текстовый/видео контент \
+                    для страницы с типом THEORY. Для других типов страниц возвращает ошибку."""
+    )
     @PostMapping("/pages/{pageId}/methodical")
     public ResponseEntity<MethodicalPageContentDto> upsertMethodical(
             @PathVariable UUID pageId,
@@ -98,7 +120,13 @@ public class CourseContentController {
         return ResponseEntity.status(res.created() ? HttpStatus.CREATED : HttpStatus.OK).body(res.dto());
     }
 
-    // 5.2 Добавить вопрос на TEST-страницу
+    @Operation(
+            summary = "Добавить вопрос на TEST-страницу",
+            description = """
+                    Авторский сценарий: создаёт вопрос для TEST-страницы урока \
+                    (single choice / multiple choice / text / code). \
+                    Для страниц другого типа возвращает ошибку."""
+    )
     @PostMapping("/pages/{pageId}/questions")
     @ResponseStatus(HttpStatus.CREATED)
     public QuestionDto createQuestion(
@@ -110,7 +138,13 @@ public class CourseContentController {
         return lessonService.createQuestion(pageId, userId, req);
     }
 
-    // 5.3 Добавить опцию к вопросу
+    @Operation(
+            summary = "Добавить вариант ответа к вопросу",
+            description = """
+                    Авторский сценарий: добавляет опцию ответа к choice-вопросу \
+                    (SINGLE_CHOICE или MULTIPLE_CHOICE). \
+                    Для вопросов других типов возвращает ошибку."""
+    )
     @PostMapping("/questions/{questionId}/options")
     @ResponseStatus(HttpStatus.CREATED)
     public QuestionOptionDto createQuestionOption(

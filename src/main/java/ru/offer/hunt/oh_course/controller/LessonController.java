@@ -1,5 +1,7 @@
 package ru.offer.hunt.oh_course.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -17,10 +19,18 @@ import ru.offer.hunt.oh_course.service.LessonService;
 @RequestMapping("/api/courses/{courseId}/lessons")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Lessons", description = "Управление уроками внутри курса (авторские операции)")
 public class LessonController {
 
     private final LessonService lessonService;
 
+    @Operation(
+            summary = "Создать урок в курсе",
+            description = """
+                    Добавляет новый урок в указанный курс. \
+                    Доступно только для участников курса с ролью OWNER/ADMIN. \
+                    Урок может быть помечен как demo (доступен в публичной части)."""
+    )
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public LessonDto createLesson(@PathVariable UUID courseId,
@@ -31,7 +41,12 @@ public class LessonController {
         return lessonService.createLesson(courseId, userId, req);
     }
 
-    // чисто для удобства проверок в swagger
+    @Operation(
+            summary = "Список уроков курса (только для авторов)",
+            description = """
+                    Возвращает все уроки указанного курса в порядке orderIndex. \
+                    Используется в редакторе курсов; доступен только участникам с ролью OWNER/ADMIN."""
+    )
     @GetMapping
     public List<LessonDto> listLessons(@PathVariable UUID courseId,
                                        JwtAuthenticationToken authentication) {

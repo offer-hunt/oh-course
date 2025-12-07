@@ -12,7 +12,10 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import ru.offer.hunt.oh_course.model.dto.CourseDto;
+import ru.offer.hunt.oh_course.model.dto.CourseStatsDto;
 import ru.offer.hunt.oh_course.model.dto.CourseUpsertRequest;
 import ru.offer.hunt.oh_course.model.entity.Course;
 import ru.offer.hunt.oh_course.model.entity.CourseMember;
@@ -32,6 +36,7 @@ import ru.offer.hunt.oh_course.model.enums.CourseMemberRole;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 import ru.offer.hunt.oh_course.model.id.CourseMemberId;
 import ru.offer.hunt.oh_course.model.mapper.CourseMapper;
+import ru.offer.hunt.oh_course.model.mapper.CourseStatsMapper;
 import ru.offer.hunt.oh_course.model.mapper.LessonMapper;
 import ru.offer.hunt.oh_course.model.repository.CourseMemberRepository;
 import ru.offer.hunt.oh_course.model.repository.CourseRepository;
@@ -59,6 +64,7 @@ public class CourseService {
     private final LessonPageRepository lessonPageRepository;
     private final TagService tagService;
     private final LessonMapper lessonMapper;
+    private final CourseStatsMapper courseStatsMapper;
 
     public List<CourseDto> getPublishedCourses(CourseFilter courseFilter) {
         CourseFilter f = courseFilter == null ? new CourseFilter() : courseFilter;
@@ -200,6 +206,113 @@ public class CourseService {
                     e);
         }
     }
+
+    @Transactional(readOnly = true)
+    public List<CourseDto> getCoursesByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+
+        List<Course> courses = courseRepository.findAllById(ids);
+        if (courses.isEmpty()) {
+            return List.of();
+        }
+
+        // Только опубликованные (как и каталог/slug)
+        Map<UUID, Course> byId = courses.stream()
+                .filter(c -> c.getStatus() == CourseStatus.PUBLISHED)
+                .collect(Collectors.toMap(Course::getId, c -> c));
+
+        List<CourseDto> result = new ArrayList<>();
+        for (UUID id : ids) {
+            Course course = byId.get(id);
+            if (course != null) {
+                result.add(courseMapper.toDto(
+                        course,
+                        lessonRepository,
+                        lessonMapper,
+                        courseStatsRepository
+                ));
+            }
+        }
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseDto> getMyCourses(UUID userId, List<CourseStatus> statuses) {
+        // Все курсы, где пользователь OWNER/ADMIN
+        List<CourseMember> memberships = courseMemberRepository.findByIdUserId(userId);
+        if (memberships.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> courseIds = memberships.stream()
+                .map(m -> m.getId().getCourseId())
+                .distinct()
+                .toList();
+
+        List<Course> courses = courseRepository.findAllById(courseIds);
+
+        // Фильтрация по статусу, если задано (DRAFT/PUBLISHED/ARCHIVED)
+        if (statuses != null && !statuses.isEmpty()) {
+            courses = courses.stream()
+                    .filter(c -> statuses.contains(c.getStatus()))
+                    .toList();
+        }
+
+        // Сортировка: самые недавно обновлённые сверху
+        courses = courses.stream()
+                .sorted((a, b) -> {
+                    OffsetDateTime ua = a.getUpdatedAt();
+                    OffsetDateTime ub = b.getUpdatedAt();
+                    if (ua == null && ub == null) return 0;
+                    if (ua == null) return 1;
+                    if (ub == null) return -1;
+                    return ub.compareTo(ua);
+                })
+                .toList();
+
+        return courses.stream()
+                .map(c -> courseMapper.toDto(c, lessonRepository, lessonMapper, courseStatsRepository))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public CourseDto getCourseDetails(UUID courseId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Курс не найден"
+                ));
+
+        // Студентам показываем только опубликованные
+        if (course.getStatus() != CourseStatus.PUBLISHED) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден");
+        }
+
+        return courseMapper.toDto(course, lessonRepository, lessonMapper, courseStatsRepository);
+    }
+
+    @Transactional(readOnly = true)
+    public CourseStatsDto getCourseStats(UUID courseId, UUID userId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Курс не найден"
+                ));
+
+        // Аналитику видят только OWNER/ADMIN курса
+        ensureCourseAdmin(course.getId(), userId);
+
+        CourseStats stats = courseStatsRepository.findById(courseId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Статистика курса не найдена"
+                ));
+
+        return courseStatsMapper.toDto(stats);
+    }
+
 
     private void validateCourseData(CourseUpsertRequest request) {
         validateTitle(request.getTitle());

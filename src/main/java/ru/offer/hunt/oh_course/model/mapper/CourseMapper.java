@@ -60,6 +60,8 @@ public interface CourseMapper {
     @Mapping(target = "estimatedDurationHours", ignore = true)
     @Mapping(target = "membersCount", ignore = true)
     @Mapping(target = "lessons", ignore = true)
+    @Mapping(target = "avgCompletion", ignore = true)
+    @Mapping(target = "avgRating", ignore = true)
     CourseDto toDto(
             Course src,
             @Context LessonRepository lessonRepository,
@@ -75,15 +77,25 @@ public interface CourseMapper {
             @Context LessonMapper lessonMapper,
             @Context CourseStatsRepository courseStatsRepository
     ) {
+        // Уроки
         List<Lesson> lessons = lessonRepository.findByCourseIdOrderByOrderIndexAsc(source.getId());
         List<LessonDto> lessonDtos = lessons.stream().map(lessonMapper::toDto).toList();
         target.setLessons(lessonDtos);
 
-        int enrollments = courseStatsRepository.findById(source.getId())
-                .map(CourseStats::getEnrollments)
-                .orElse(0);
-        target.setMembersCount(enrollments);
+        // Статистика курса
+        CourseStats stats = courseStatsRepository.findById(source.getId()).orElse(null);
+        if (stats != null) {
+            target.setMembersCount(stats.getEnrollments());
+            target.setAvgCompletion(stats.getAvgCompletion());
+            target.setAvgRating(stats.getAvgRating());
+        } else {
+            // На всякий случай, но вообще строка в course_stats создаётся при создании курса
+            target.setMembersCount(0);
+            target.setAvgCompletion(null);
+            target.setAvgRating(null);
+        }
 
+        // Оценочная длительность в часах
         Integer min = source.getEstimatedDurationMin();
         if (min != null && min > 0) {
             int hours = (min + 59) / 60;
