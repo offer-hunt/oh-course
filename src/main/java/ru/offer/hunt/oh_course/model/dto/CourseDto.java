@@ -5,6 +5,7 @@ import lombok.Setter;
 import ru.offer.hunt.oh_course.model.enums.AccessType;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -34,5 +35,7 @@ public class CourseDto {
     private List<TagRefDto> tags;
     private Integer estimatedDurationHours;
     private Integer membersCount;
+    private BigDecimal avgCompletion;
+    private BigDecimal avgRating;
     private List<LessonDto> lessons;
 }
