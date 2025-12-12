@@ -9,7 +9,7 @@ import lombok.Setter;
 @Setter
 public class QuestionOptionUpsertRequest {
 
-    @NotBlank
+    @NotBlank(message = "Поле для варианта ответа не должно быть пустым")
     private String label;
 
     private Boolean correct;
