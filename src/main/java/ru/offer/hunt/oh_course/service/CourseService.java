@@ -1,22 +1,38 @@
 package ru.offer.hunt.oh_course.service;
 
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withAuthorId;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withDurations;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withLanguages;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withLevels;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withQuery;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withStatus;
+import static ru.offer.hunt.oh_course.model.specification.CourseSpecification.withTechnologies;
+
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import ru.offer.hunt.oh_course.model.dto.*;
 import ru.offer.hunt.oh_course.model.entity.*;
+import ru.offer.hunt.oh_course.model.dto.CourseDto;
+import ru.offer.hunt.oh_course.model.dto.CourseStatsDto;
+import ru.offer.hunt.oh_course.model.dto.CourseUpsertRequest;
+import ru.offer.hunt.oh_course.model.entity.Course;
+import ru.offer.hunt.oh_course.model.entity.CourseMember;
+import ru.offer.hunt.oh_course.model.entity.CourseStats;
+import ru.offer.hunt.oh_course.model.entity.Lesson;
 import ru.offer.hunt.oh_course.model.enums.AccessType;
 import ru.offer.hunt.oh_course.model.enums.CourseMemberRole;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
@@ -24,6 +40,15 @@ import ru.offer.hunt.oh_course.model.id.CourseMemberId;
 import ru.offer.hunt.oh_course.model.id.CourseTagId;
 import ru.offer.hunt.oh_course.model.mapper.*;
 import ru.offer.hunt.oh_course.model.repository.*;
+import ru.offer.hunt.oh_course.model.mapper.CourseMapper;
+import ru.offer.hunt.oh_course.model.mapper.CourseStatsMapper;
+import ru.offer.hunt.oh_course.model.mapper.LessonMapper;
+import ru.offer.hunt.oh_course.model.repository.CourseMemberRepository;
+import ru.offer.hunt.oh_course.model.repository.CourseRepository;
+import ru.offer.hunt.oh_course.model.repository.CourseStatsRepository;
+import ru.offer.hunt.oh_course.model.repository.LessonPageRepository;
+import ru.offer.hunt.oh_course.model.repository.LessonRepository;
+import ru.offer.hunt.oh_course.model.search.CourseFilter;
 
 @Service
 @RequiredArgsConstructor
@@ -38,8 +63,7 @@ public class CourseService {
 
     private final CourseRepository courseRepository;
     private final CourseMemberRepository courseMemberRepository;
-    private final TagRefRepository courseTagRefRepository;
-    private final CourseTagRepository courseTagRepository;
+    private final CourseStatsRepository courseStatsRepository;
     private final CourseMapper courseMapper;
     private final LessonRepository lessonRepository;
     private final LessonPageRepository lessonPageRepository;
@@ -55,24 +79,73 @@ public class CourseService {
     private final QuestionOptionMapper questionOptionMapper;
     private final QuestionTestCaseMapper questionTestCaseMapper;
     private final MethodicalPageContentMapper methodicalPageContentMapper;
+    private final TagService tagService;
+    private final LessonMapper lessonMapper;
+    private final CourseStatsMapper courseStatsMapper;
+
+    public List<CourseDto> getPublishedCourses(CourseFilter courseFilter) {
+        CourseFilter f = courseFilter == null ? new CourseFilter() : courseFilter;
+
+        Specification<Course> spec = Specification.where(withStatus(CourseStatus.PUBLISHED))
+                .and(withAuthorId(f.getAuthorId()))
+                .and(withLanguages(f.getLanguage()))
+                .and(withTechnologies(f.getTechnologies()))
+                .and(withLevels(f.getLevel()))
+                .and(withDurations(f.getDuration()))
+                .and(withQuery(f.getQuery()));
+
+        return courseRepository.findAll(spec).stream()
+                .map(c -> courseMapper.toDto(c, lessonRepository, lessonMapper, courseStatsRepository))
+                .toList();
+    }
+
+    public CourseDto getPublishedCourseBySlug(String slug, String inviteCode) {
+        Course course = courseRepository.findBySlugAndStatus(slug, CourseStatus.PUBLISHED)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
+
+        if (course.getAccessType() == AccessType.PRIVATE_LINK) {
+            String expected = course.getInviteCode();
+            if (expected == null || inviteCode == null || !expected.equals(inviteCode)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Доступ к этому курсу ограничен");
+            }
+        }
+
+        return courseMapper.toDto(course, lessonRepository, lessonMapper, courseStatsRepository);
+    }
 
     @Transactional
     public CourseDto createCourse(UUID authorId, CourseUpsertRequest request) {
-
         OffsetDateTime now = OffsetDateTime.now();
 
         try {
             validateCourseData(request);
 
-            Course course = buildCourseEntity(authorId, request, now);
-            Course savedCourse = courseRepository.save(course);
+            Course course = courseMapper.toEntity(request, tagService);
 
-            createOwnerMembership(savedCourse.getId(), authorId, now);
-            syncCourseTags(savedCourse.getId(), request.getTags(), now);
+            course.setId(UUID.randomUUID());
+            course.setAuthorId(authorId);
+            course.setStatus(CourseStatus.DRAFT);
+            course.setVersion(1);
+            course.setRequiresEntitlement(false);
+            course.setCreatedAt(now);
+            course.setUpdatedAt(now);
 
-            log.info("Course created: id={}, authorId={}", savedCourse.getId(), authorId);
+            courseRepository.save(course);
 
-            return courseMapper.toDto(savedCourse);
+            // OWNER membership (Course-RBAC)
+            createOwnerMembership(course.getId(), authorId, now);
+
+            // stats row (чтобы membersCount не был "null" и всегда был источник истины)
+            CourseStats stats = CourseStats.builder()
+                    .courseId(course.getId())
+                    .enrollments(0)
+                    .avgCompletion(java.math.BigDecimal.ZERO)
+                    .avgRating(java.math.BigDecimal.ZERO)
+                    .updatedAt(now)
+                    .build();
+            courseStatsRepository.save(stats);
+
+            return courseMapper.toDto(course, lessonRepository, lessonMapper, courseStatsRepository);
 
         } catch (ResponseStatusException ex) {
             throw ex;
@@ -106,37 +179,26 @@ public class CourseService {
             Course course =
                     courseRepository
                             .findById(courseId)
-                            .orElseThrow(
-                                    () ->
-                                            new ResponseStatusException(
-                                                    HttpStatus.NOT_FOUND, "Курс не найден"));
+                            .orElseThrow(() ->
+                                    new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
 
-            // только OWNER/ADMIN могут публиковать
             ensureCourseAdmin(course.getId(), userId);
 
-            // уже опубликован / заархивирован
             if (course.getStatus() == CourseStatus.PUBLISHED) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Курс уже опубликован");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Курс уже опубликован");
             }
             if (course.getStatus() == CourseStatus.ARCHIVED) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Заархивированный курс нельзя опубликовать");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Заархивированный курс нельзя опубликовать");
             }
 
-            // Валидация
             List<String> issues = validateCourseReadyForPublication(course);
-
             if (!issues.isEmpty()) {
-                log.warn(
-                        "Course publication failed - requirements not met: courseId={}, issues={}",
-                        courseId,
-                        issues);
-                String message =
-                        "Курс не готов к публикации: " + String.join("; ", issues);
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+                log.warn("Course publication failed - requirements not met: courseId={}, issues={}",
+                        courseId, issues);
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Курс не готов к публикации: " + String.join("; ", issues)
+                );
             }
 
             OffsetDateTime now = OffsetDateTime.now();
@@ -144,26 +206,130 @@ public class CourseService {
             course.setPublishedAt(now);
             course.setUpdatedAt(now);
 
-            Course saved = courseRepository.save(course);
+            courseRepository.save(course);
 
             log.info("Course published: courseId={}, userId={}", courseId, userId);
 
-            return courseMapper.toDto(saved);
+            return courseMapper.toDto(course, lessonRepository, lessonMapper, courseStatsRepository);
 
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            log.error(
-                    "Course publication failed - server error, courseId={}, userId={}",
-                    courseId,
-                    userId,
-                    e);
+            log.error("Course publication failed - server error, courseId={}, userId={}",
+                    courseId, userId, e);
             throw new ResponseStatusException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "Не удалось опубликовать курс. Попробуйте позже.",
                     e);
         }
     }
+
+    @Transactional(readOnly = true)
+    public List<CourseDto> getCoursesByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+
+        List<Course> courses = courseRepository.findAllById(ids);
+        if (courses.isEmpty()) {
+            return List.of();
+        }
+
+        // Только опубликованные (как и каталог/slug)
+        Map<UUID, Course> byId = courses.stream()
+                .filter(c -> c.getStatus() == CourseStatus.PUBLISHED)
+                .collect(Collectors.toMap(Course::getId, c -> c));
+
+        List<CourseDto> result = new ArrayList<>();
+        for (UUID id : ids) {
+            Course course = byId.get(id);
+            if (course != null) {
+                result.add(courseMapper.toDto(
+                        course,
+                        lessonRepository,
+                        lessonMapper,
+                        courseStatsRepository
+                ));
+            }
+        }
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseDto> getMyCourses(UUID userId, List<CourseStatus> statuses) {
+        // Все курсы, где пользователь OWNER/ADMIN
+        List<CourseMember> memberships = courseMemberRepository.findByIdUserId(userId);
+        if (memberships.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> courseIds = memberships.stream()
+                .map(m -> m.getId().getCourseId())
+                .distinct()
+                .toList();
+
+        List<Course> courses = courseRepository.findAllById(courseIds);
+
+        // Фильтрация по статусу, если задано (DRAFT/PUBLISHED/ARCHIVED)
+        if (statuses != null && !statuses.isEmpty()) {
+            courses = courses.stream()
+                    .filter(c -> statuses.contains(c.getStatus()))
+                    .toList();
+        }
+
+        // Сортировка: самые недавно обновлённые сверху
+        courses = courses.stream()
+                .sorted((a, b) -> {
+                    OffsetDateTime ua = a.getUpdatedAt();
+                    OffsetDateTime ub = b.getUpdatedAt();
+                    if (ua == null && ub == null) return 0;
+                    if (ua == null) return 1;
+                    if (ub == null) return -1;
+                    return ub.compareTo(ua);
+                })
+                .toList();
+
+        return courses.stream()
+                .map(c -> courseMapper.toDto(c, lessonRepository, lessonMapper, courseStatsRepository))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public CourseDto getCourseDetails(UUID courseId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Курс не найден"
+                ));
+
+        // Студентам показываем только опубликованные
+        if (course.getStatus() != CourseStatus.PUBLISHED) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден");
+        }
+
+        return courseMapper.toDto(course, lessonRepository, lessonMapper, courseStatsRepository);
+    }
+
+    @Transactional(readOnly = true)
+    public CourseStatsDto getCourseStats(UUID courseId, UUID userId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Курс не найден"
+                ));
+
+        // Аналитику видят только OWNER/ADMIN курса
+        ensureCourseAdmin(course.getId(), userId);
+
+        CourseStats stats = courseStatsRepository.findById(courseId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Статистика курса не найдена"
+                ));
+
+        return courseStatsMapper.toDto(stats);
+    }
+
 
     private void validateCourseData(CourseUpsertRequest request) {
         validateTitle(request.getTitle());
@@ -200,14 +366,10 @@ public class CourseService {
     }
 
     private void validateCover(String coverUrl) {
-        if (coverUrl == null || coverUrl.isBlank()) {
-            return;
-        }
+        if (coverUrl == null || coverUrl.isBlank()) return;
 
         String lower = coverUrl.toLowerCase(Locale.ROOT);
-        boolean ok = lower.endsWith(".jpg")
-                || lower.endsWith(".jpeg")
-                || lower.endsWith(".png");
+        boolean ok = lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
 
         if (!ok) {
             log.warn("Course creation failed - invalid cover: {}", coverUrl);
@@ -219,26 +381,18 @@ public class CourseService {
     }
 
     private void validateTags(List<String> tags) {
-        if (tags == null || tags.isEmpty()) {
-            return;
-        }
+        if (tags == null || tags.isEmpty()) return;
 
         if (tags.size() > TAGS_MAX_COUNT) {
             log.warn("Course creation failed - invalid tags count (size={})", tags.size());
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Не более 10 тегов"
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Не более 10 тегов");
         }
 
         for (String rawTag : tags) {
             String tag = rawTag == null ? "" : rawTag.trim();
             if (tag.length() > TAG_MAX_LEN) {
                 log.warn("Course creation failed - invalid tag: '{}'", tag);
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Тег не длиннее 15 символов"
-                );
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Тег не длиннее 15 символов");
             }
         }
     }
@@ -246,36 +400,12 @@ public class CourseService {
     private void validateAccessType(AccessType accessType) {
         if (accessType == null) {
             log.warn("Course creation failed - accessType is null");
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Тип доступа обязателен"
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Тип доступа обязателен");
         }
     }
 
-    private Course buildCourseEntity(UUID authorId,
-                                     CourseUpsertRequest request,
-                                     OffsetDateTime now) {
-
-        Course course = courseMapper.toEntity(request);
-
-        course.setId(UUID.randomUUID());
-        course.setAuthorId(authorId);
-        course.setStatus(CourseStatus.DRAFT);
-        course.setVersion(1);
-        course.setRequiresEntitlement(false);
-        course.setCreatedAt(now);
-        course.setUpdatedAt(now);
-
-        return course;
-    }
-
-    private void createOwnerMembership(UUID courseId,
-                                       UUID authorId,
-                                       OffsetDateTime now) {
-
+    private void createOwnerMembership(UUID courseId, UUID authorId, OffsetDateTime now) {
         CourseMemberId id = new CourseMemberId(courseId, authorId);
-
         CourseMember owner = CourseMember.builder()
                 .id(id)
                 .role(CourseMemberRole.OWNER)
@@ -286,51 +416,12 @@ public class CourseService {
         courseMemberRepository.save(owner);
     }
 
-    private void syncCourseTags(UUID courseId,
-                                List<String> tags,
-                                OffsetDateTime now) {
-        if (tags == null || tags.isEmpty()) {
-            return;
-        }
-
-        List<String> normalized = tags.stream()
-                .map(tag -> tag == null ? "" : tag.trim())
-                .filter(tag -> !tag.isEmpty())
-                .map(tag -> tag.toLowerCase(Locale.ROOT))
-                .distinct()
-                .toList();
-
-        List<CourseTag> links = new ArrayList<>();
-
-        for (String tagName : normalized) {
-            TagRef tagRef = courseTagRefRepository
-                    .findByNameIgnoreCase(tagName)
-                    .orElseGet(() -> {
-                        TagRef ref = new TagRef();
-                        ref.setId(UUID.randomUUID());
-                        ref.setName(tagName);
-                        ref.setCreatedAt(now);
-                        return courseTagRefRepository.save(ref);
-                    });
-
-            CourseTagId linkId = new CourseTagId(courseId, tagRef.getId());
-            CourseTag link = new CourseTag();
-            link.setId(linkId);
-
-            links.add(link);
-        }
-
-        courseTagRepository.saveAll(links);
-    }
-
     private boolean isSlugUniqueViolation(DataIntegrityViolationException ex) {
         String message = ex.getMostSpecificCause() != null
                 ? ex.getMostSpecificCause().getMessage()
                 : ex.getMessage();
 
-        if (message == null) {
-            return false;
-        }
+        if (message == null) return false;
 
         return message.contains("course_courses_slug_key")
                 || message.contains("course_courses_slug_idx")
@@ -340,15 +431,9 @@ public class CourseService {
     private List<String> validateCourseReadyForPublication(Course course) {
         List<String> issues = new ArrayList<>();
 
-        if (course.getTitle() == null || course.getTitle().trim().isEmpty()) {
-            issues.add("Добавьте название курса");
-        }
-        if (course.getDescription() == null || course.getDescription().trim().isEmpty()) {
-            issues.add("Добавьте описание курса");
-        }
-        if (course.getCoverUrl() == null || course.getCoverUrl().trim().isEmpty()) {
-            issues.add("Добавьте обложку");
-        }
+        if (course.getTitle() == null || course.getTitle().trim().isEmpty()) issues.add("Добавьте название курса");
+        if (course.getDescription() == null || course.getDescription().trim().isEmpty()) issues.add("Добавьте описание курса");
+        if (course.getCoverUrl() == null || course.getCoverUrl().trim().isEmpty()) issues.add("Добавьте обложку");
 
         List<Lesson> lessons = lessonRepository.findByCourseId(course.getId());
         if (lessons.isEmpty()) {
@@ -362,17 +447,11 @@ public class CourseService {
             if (lesson.getTitle() == null || lesson.getTitle().trim().isEmpty()) {
                 issues.add("Заполните название урока (id=" + lesson.getId() + ")");
             }
-
             boolean hasPages = lessonPageRepository.existsByLessonId(lesson.getId());
-            if (hasPages) {
-                hasLessonWithContent = true;
-            }
+            if (hasPages) hasLessonWithContent = true;
         }
 
-        if (!hasLessonWithContent) {
-            issues.add("Добавьте хотя бы один урок с содержимым");
-        }
-
+        if (!hasLessonWithContent) issues.add("Добавьте хотя бы один урок с содержимым");
 
         return issues;
     }
@@ -386,10 +465,7 @@ public class CourseService {
 
         if (!allowed) {
             log.warn("Course publish forbidden: courseId={}, userId={}", courseId, userId);
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Недостаточно прав для публикации курса");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Недостаточно прав для публикации курса");
         }
     }
-
 }

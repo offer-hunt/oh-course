@@ -1,5 +1,7 @@
 package ru.offer.hunt.oh_course.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -16,10 +18,18 @@ import ru.offer.hunt.oh_course.service.CourseMemberService;
 @RequestMapping("/api/courses/{courseId}/members")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Course members", description = "Управление участниками и соавторами курса")
 public class CourseMemberController {
 
     private final CourseMemberService courseMemberService;
 
+    @Operation(
+            summary = "Добавить соавтора к курсу",
+            description = """
+                    Добавляет пользователя в участники курса с указанной ролью (OWNER/ADMIN). \
+                    Поиск пользователя идёт по email через UserDirectoryClient. \
+                    Требует, чтобы текущий пользователь имел роль OWNER/ADMIN в этом курсе."""
+    )
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CourseMemberDto addCollaborator(@PathVariable UUID courseId,
