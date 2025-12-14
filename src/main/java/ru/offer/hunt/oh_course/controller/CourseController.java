@@ -45,19 +45,4 @@ public class CourseController {
     }
 
 
-    @GetMapping("/get/{courseId}")
-    public CourseGetDto getCourse(
-            @PathVariable("courseId") UUID courseId,
-            JwtAuthenticationToken authentication) {
-
-        UUID userId = SecurityUtils.getUserId(authentication);
-        return courseService.getCourseDto(courseId, userId);
-    }
-
-
-    @GetMapping("/getDataPage/{pageId}")
-    public PageDataDto getDataPage(@PathVariable("pageId") UUID pageId, JwtAuthenticationToken authentication) {
-        UUID userId = SecurityUtils.getUserId(authentication);
-        return courseService.getPageDataDto(userId, pageId);
-    }
 }
