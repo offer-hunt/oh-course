@@ -49,31 +49,31 @@ public class MethodicalPageContentService {
                     .orElseThrow(() ->
                             new ResponseStatusException(HttpStatus.NOT_FOUND, "Страница не найдена"));
 
-            UUID lessonId = page.getLessonId();
-            if (lessonId == null) {
-                throw new ResponseStatusException(
-                        HttpStatus.INTERNAL_SERVER_ERROR,
-                        "Не удалось определить урок для страницы на которую мы загружаем markdown файл"
-                );
-            }
-
-            Lesson lesson = lessonRepository.findById(lessonId)
-                    .orElseThrow(() ->
-                            new ResponseStatusException(
-                                    HttpStatus.INTERNAL_SERVER_ERROR,
-                                    "Не удалось определить урок для страницы на которую мы загружаем markdown файл"
-                            ));
-
-            UUID courseId = lesson.getCourseId();
-            if (courseId == null) {
-                throw new ResponseStatusException(
-                        HttpStatus.INTERNAL_SERVER_ERROR,
-                        "Не удалось определить курс для страницы на которую мы загружаем markdown файл"
-                );
-            }
+//            UUID lessonId = page.getLessonId();
+//            if (lessonId == null) {
+//                throw new ResponseStatusException(
+//                        HttpStatus.INTERNAL_SERVER_ERROR,
+//                        "Не удалось определить урок для страницы на которую мы загружаем markdown файл"
+//                );
+//            }
+//
+//            Lesson lesson = lessonRepository.findById(lessonId)
+//                    .orElseThrow(() ->
+//                            new ResponseStatusException(
+//                                    HttpStatus.INTERNAL_SERVER_ERROR,
+//                                    "Не удалось определить урок для страницы на которую мы загружаем markdown файл"
+//                            ));
+//
+//            UUID courseId = lesson.getCourseId();
+//            if (courseId == null) {
+//                throw new ResponseStatusException(
+//                        HttpStatus.INTERNAL_SERVER_ERROR,
+//                        "Не удалось определить курс для страницы на которую мы загружаем markdown файл"
+//                );
+//            }
 
             /// Проверка прав
-            ensureCanEditCodeTasks(courseId, userId);
+            ensureCanEditCodeTasks(page.getLesson().getCourse().getId(), userId);
 
             /// Создаем объект из DTO
             var methodicalPage = methodicalPageContentMapper.toEntity(pageId, methodicalPageContentUpsertRequest);
