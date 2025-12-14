@@ -164,40 +164,6 @@ public class CourseService {
                     e);
         }
     }
-    @Transactional
-    public CourseGetDto getCourseDto(UUID courseId, UUID userId){
-
-        try{
-            if(!checkUserPermissions(courseId, userId)){
-                log.error("User ID = {} opened course structure Course ID = {} - access error", userId, courseId);
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Курс недоступен");
-
-            }
-
-            Course course = courseRepository.findById(courseId).orElseThrow(
-                    () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
-
-            List<Lesson> lessons = lessonRepository.findByCourseId(courseId);
-            List<LessonWithPagesDto> lessonWithPagesDto = new ArrayList<>();
-            for(Lesson ls : lessons){
-                lessonWithPagesDto.add(new LessonWithPagesDto(lessonMapper.toDto(ls), lessonPageRepository.findByLessonId(ls.getId()).stream().map(lessonPageMapper::toDto).collect(Collectors.toList())));
-            }
-
-            return new CourseGetDto(courseMapper.toDto(course), lessonWithPagesDto);
-
-
-        }catch (ResponseStatusException e) {
-            throw e;
-        }catch (Exception ex) {
-            log.error("Course get structure failed - server error, courseId={}", courseId, ex);
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Не удалось выдать страницу. Попробуйте позже."
-            );
-        }
-
-    }
-
 
     private void validateCourseData(CourseUpsertRequest request) {
         validateTitle(request.getTitle());
