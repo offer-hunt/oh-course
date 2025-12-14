@@ -11,4 +11,5 @@ public interface LessonPageRepository extends JpaRepository<LessonPage, UUID> {
     boolean existsByLessonId(UUID id);
 
     List<LessonPage> findByLessonIdOrderBySortOrderAsc(UUID lessonId);
+    List<LessonPage> findByLessonId(UUID id);
 }
