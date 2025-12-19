@@ -5,4 +5,6 @@ import ru.offer.hunt.oh_course.model.entity.CourseStats;
 
 import java.util.UUID;
 
-public interface CourseStatsRepository extends JpaRepository<CourseStats, UUID> {}
+public interface CourseStatsRepository extends JpaRepository<CourseStats, UUID> {
+    void deleteByCourseId(UUID courseId);
+}

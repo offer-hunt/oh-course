@@ -39,6 +39,7 @@ create table if not exists course.course_lessons
     description     text null,
     order_index     int not null,
     duration_min    int null,
+    is_demo         boolean not null default false,
     created_at      timestamptz not null default now(),
     updated_at      timestamptz null
 );
@@ -128,4 +129,16 @@ create table if not exists course.course_stats
     avg_completion  numeric(5,2) not null default 0,
     avg_rating      numeric(3,2) not null default 0,
     updated_at      timestamptz not null default now()
+);
+
+create table if not exists course.course_content_versions
+(
+    id           uuid primary key,
+    course_id    uuid not null references course.course_courses (id),
+    lesson_id    uuid null references course.course_lessons (id),
+    scope        varchar not null check (scope in ('COURSE','LESSON')),
+    created_by   uuid not null,
+    created_at   timestamptz not null default now(),
+    comment      text null,
+    payload_json text not null
 );

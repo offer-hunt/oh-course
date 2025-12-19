@@ -18,4 +18,6 @@ public class LessonUpsertRequest {
     private Integer orderIndex;
 
     private Integer durationMin;
+
+    private Boolean demo;
 }

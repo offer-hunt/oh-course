@@ -26,51 +26,9 @@ public class LessonPageService {
     private final LessonRepository lessonRepository;
 
     @Transactional
-    public LessonPageDto addLessonPage(UUID lessonId, LessonPageUpsertRequest request) {
-        String pageTypeLogName = request.getPageType() != null ? request.getPageType().name() : "Unknown";
-
-        if (request.getTitle() == null || request.getTitle().trim().isEmpty()) {
-            log.warn("{} add failed - empty title. LessonID: {}", pageTypeLogName, lessonId);
-            throw new IllegalArgumentException("Название страницы не может быть пустым");
-        }
-
-        try {
-            Lesson lesson = lessonRepository.findById(lessonId)
-                    .orElseThrow(() -> new IllegalArgumentException("Lesson not found with id: " + lessonId));
-            UUID courseId = lesson.getCourseId();
-
-            List<LessonPage> existingPages = lessonPageRepository.findByLessonIdOrderBySortOrderAsc(lessonId);
-            int nextOrderIndex;
-            if (existingPages.isEmpty()) {
-                nextOrderIndex = 1;
-            } else {
-                LessonPage lastPage = existingPages.get(existingPages.size() - 1);
-                nextOrderIndex = lastPage.getSortOrder() + 1;
-            }
-
-            LessonPage lessonPage = lessonPageMapper.toEntity(lessonId, request);
-            lessonPage.setId(UUID.randomUUID());
-            lessonPage.setSortOrder(nextOrderIndex);
-
-            OffsetDateTime now = OffsetDateTime.now();
-            lessonPage.setCreatedAt(now);
-            lessonPage.setUpdatedAt(now);
-
-            lessonPageRepository.save(lessonPage);
-
-            log.info("{} page added. CourseID: {}, LessonID: {}", pageTypeLogName, courseId, lessonId);
-
-            return lessonPageMapper.toDto(lessonPage);
-
-        } catch (Exception e) {
-            log.error("{} page add failed - server error. LessonID: {}", pageTypeLogName, lessonId, e);
-            throw e;
-        }
-    }
-
-    @Transactional
     public LessonPageDto addLessonToChapter(
             UUID chapterId,
+            UUID userId,
             LessonPageUpsertRequest request
     ) {
         if (request.getTitle() == null || request.getTitle().trim().isEmpty()) {
@@ -81,7 +39,10 @@ public class LessonPageService {
         try {
             Lesson chapter = lessonRepository.findById(chapterId)
                     .orElseThrow(() -> new IllegalArgumentException("Chapter (Lesson) not found with id: " + chapterId));
-            UUID courseId = chapter.getCourseId();
+
+            checkCourseOwnership(chapter, userId);
+
+            UUID courseId = chapter.getCourse().getId();
 
             List<LessonPage> existingItems = lessonPageRepository.findByLessonIdOrderBySortOrderAsc(chapterId);
             int nextOrderIndex;
@@ -92,8 +53,9 @@ public class LessonPageService {
                 nextOrderIndex = lastItem.getSortOrder() + 1;
             }
 
-            LessonPage lessonPage = lessonPageMapper.toEntity(chapterId, request);
+            LessonPage lessonPage = lessonPageMapper.toEntity(request);
             lessonPage.setId(UUID.randomUUID());
+            lessonPage.setLesson(chapter);
             lessonPage.setSortOrder(nextOrderIndex);
 
             OffsetDateTime now = OffsetDateTime.now();
@@ -115,6 +77,7 @@ public class LessonPageService {
     @Transactional
     public LessonPageDto updateLessonPage(
             UUID pageId,
+            UUID userId,
             LessonPageUpsertRequest request
     ) {
         if (request.getTitle() == null || request.getTitle().trim().isEmpty()) {
@@ -125,6 +88,8 @@ public class LessonPageService {
         try {
             LessonPage lessonPage = lessonPageRepository.findById(pageId)
                     .orElseThrow(() -> new IllegalArgumentException("Page not found with id: " + pageId));
+
+            checkCourseOwnership(lessonPage.getLesson(), userId);
 
             Integer oldOrder = lessonPage.getSortOrder();
             lessonPageMapper.update(lessonPage, request);
@@ -145,17 +110,34 @@ public class LessonPageService {
     }
 
     @Transactional
-    public void deleteLessonPage(UUID pageId) {
+    public void deleteLessonPage(
+            UUID pageId,
+            UUID userId
+    ) {
         if (!lessonPageRepository.existsById(pageId)) {
             log.warn("Attempt to delete non-existent page: {}", pageId);
             throw new IllegalArgumentException("Не найдена страница. ID: " + pageId);
         }
         try {
+            LessonPage lessonPage = lessonPageRepository.findById(pageId)
+                    .orElseThrow(() -> new IllegalArgumentException("Page not found: " + pageId));
+
+            checkCourseOwnership(lessonPage.getLesson(), userId);
+
+            lessonPageRepository.delete(lessonPage);
+
             lessonPageRepository.deleteById(pageId);
             log.info("Page deleted. ID: {}", pageId);
         } catch (Exception e) {
             log.error("Page delete failed - server error. ID: {}", pageId, e);
             throw e;
+        }
+    }
+
+
+    private void checkCourseOwnership(Lesson lesson, UUID userId) {
+        if (!lesson.getCourse().getAuthorId().equals(userId)) {
+            throw new SecurityException("Вы не являетесь автором этого курса и не можете менять его контент");
         }
     }
 }

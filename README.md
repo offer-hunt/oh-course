@@ -30,5 +30,13 @@ docker-compose down
 
 ## 3. Тестирование через Swagger
 
-Запустите приложение и перейдите по ссылке:
+Соберите и запустите сервис под профилем local:
+
+```bash
+./gradlew clean build
+java -jar build/libs/oh-course-0.0.1.jar --spring.profiles.active=local
+```
+
+Перейдите по ссылке:
+
 **[http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)**

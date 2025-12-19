@@ -8,13 +8,13 @@ import ru.offer.hunt.oh_course.model.entity.*;
 public interface CloningMapper {
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "courseId", ignore = true)
+    @Mapping(target = "course", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     Lesson copyLesson(Lesson source);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "lessonId", ignore = true)
+    @Mapping(target = "lesson", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     LessonPage copyPage(LessonPage source);

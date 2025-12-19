@@ -12,6 +12,9 @@ spring:
         schemas: course
         baseline-on-migrate: true
 
+logging:
+  level:
+    org.springframework.security: DEBUG
 
 # JWT env-vars (read in SecurityConfig)
 app:

@@ -18,10 +18,12 @@ public interface QuestionOptionMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "questionId", source = "questionId")
+    @Mapping(target = "correct", expression = "java(Boolean.TRUE.equals(req.getCorrect()))")
     QuestionOption toEntity(UUID questionId, QuestionOptionUpsertRequest req);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "questionId", ignore = true)
+    @Mapping(target = "correct", expression = "java(req.getCorrect() == null ? target.isCorrect() : req.getCorrect())")
     void update(@MappingTarget QuestionOption target, QuestionOptionUpsertRequest req);
 }
