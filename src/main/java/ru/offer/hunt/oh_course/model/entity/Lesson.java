@@ -26,7 +26,6 @@ import java.util.UUID;
 @Builder
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class Lesson {
-
     @Id
     @EqualsAndHashCode.Include
     @Column(name = "id", nullable = false)

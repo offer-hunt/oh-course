@@ -12,7 +12,6 @@ import ru.offer.hunt.oh_course.model.enums.PageType;
 @Getter
 @Setter
 public class LessonPage {
-
     @Id
     private UUID id;
 

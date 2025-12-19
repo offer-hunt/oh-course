@@ -62,7 +62,8 @@ public class SecurityConfig {
                                         .hasAuthority("SCOPE_course.read")
 
                                         .anyRequest()
-                                        .authenticated())
+                                        .authenticated()
+                )
                 .oauth2ResourceServer(
                         oauth2 ->
                                 oauth2.jwt(

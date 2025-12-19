@@ -22,6 +22,7 @@ import ru.offer.hunt.oh_course.model.enums.AccessType;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -103,7 +104,7 @@ public class Course {
             joinColumns = @JoinColumn(name = "course_id"),
             inverseJoinColumns = @JoinColumn(name = "tag_id")
     )
-    private List<TagRef> tagRefs;
+    private List<TagRef> tagRefs = new ArrayList<>();
 
     @OneToMany(
             mappedBy = "course",

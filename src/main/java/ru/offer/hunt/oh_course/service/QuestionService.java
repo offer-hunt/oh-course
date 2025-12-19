@@ -55,14 +55,12 @@ public class QuestionService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Нет ни одного варианта ответа");
             }
 
-            /// Проверяем все ответы, так как поле correct - может быть null
             for (QuestionOptionUpsertRequest req : optionals) {
                 if(req.getCorrect() == null){
                     req.setCorrect(false);
                 }
             }
 
-            /// Проверяем наличие хотя бы одного правильного ответа
             boolean correctAnswer = optionals.stream().anyMatch(QuestionOptionUpsertRequest::getCorrect);
             if (!correctAnswer) {
                 log.error("Question create failed - no correct answer, pageId={}", pageId);
@@ -121,32 +119,26 @@ public class QuestionService {
     public QuestionDto  createDetailedAnswer(UUID pageId, QuestionUpsertRequest request, UUID userId){
 
         try {
-            /// Первоначальная проверка DTO
-            /// Проверка наличия ответа, наличие вопроса проверяется автоматически, аннотацией @Valid
             if (request.getCorrectAnswer().isBlank()) {
                 log.error("Detailed Question create failed - no correct answer, pageId={}", pageId);
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Нет варианта ответа");
             }
 
-            /// Проверка типа вопроса
             if(request.getType() != TEXT_INPUT){
                 log.error("Detailed Question create failed - wrong type, pageId={}", pageId);
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Поле для ответа не определено");
             }
 
-            /// Проверка длины вопроса
             if(request.getText().length() > MAX_SIZE){
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Слишком длинный вопрос");
             }
 
-            /// Проверка длины ответа
             if(request.getCorrectAnswer().length() > MAX_SIZE){
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Слишком длинный ответ");
             }
 
             checkRightUserAndExistenceCourse(pageId, userId);
 
-            /// Проверка поля use_ai_check
             if(request.getUseAiCheck() == null){
                 request.setUseAiCheck(false);
             }
@@ -179,7 +171,6 @@ public class QuestionService {
     }
 
     private boolean checkAI(QuestionUpsertRequest request){
-        /// Тут заглушка Проверка AI
         return true;
     }
 
@@ -205,35 +196,10 @@ public class QuestionService {
     }
 
     private void checkRightUserAndExistenceCourse(UUID pageId, UUID userId){
-        /// Проверяем существование страницы, урока, курса + достаем Id курса, для проверки прав (это можно будет потом как-то оптимизировать, чтобы не делать 3 GET запроса, но это потом)
         LessonPage page = lessonPageRepository.findById(pageId)
                 .orElseThrow(() ->
                         new ResponseStatusException(HttpStatus.NOT_FOUND, "Страница не найдена"));
 
-//        UUID lessonId = page.getLesson();
-//        if (lessonId == null) {
-//            throw new ResponseStatusException(
-//                    HttpStatus.INTERNAL_SERVER_ERROR,
-//                    "Не удалось определить урок для страницы на которую мы загружаем вопрос с текстовым ответом"
-//            );
-//        }
-//
-//        Lesson lesson = lessonRepository.findById(lessonId)
-//                .orElseThrow(() ->
-//                        new ResponseStatusException(
-//                                HttpStatus.INTERNAL_SERVER_ERROR,
-//                                "Не удалось определить урок для страницы на которую мы загружаем вопрос с текстовым ответом"
-//                        ));
-//
-//        UUID courseId = lesson.getCourseId();
-//        if (courseId == null) {
-//            throw new ResponseStatusException(
-//                    HttpStatus.INTERNAL_SERVER_ERROR,
-//                    "Не удалось определить курс для страницы на которую мы загружаем вопрос с текстовым ответом"
-//            );
-//        }
-
-        /// Проверка прав
         ensureCanEditCodeTasks(page.getLesson().getCourse().getId(), userId);
     }
 

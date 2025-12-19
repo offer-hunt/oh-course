@@ -21,4 +21,6 @@ public interface CourseMemberRepository extends JpaRepository<CourseMember, Cour
     List<CourseMember> findByIdUserId(UUID userId);
 
     int countByIdCourseId(UUID courseId);
+
+    void deleteByIdCourseId(UUID courseId);
 }

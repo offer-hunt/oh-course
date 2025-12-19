@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface QuestionRepository extends JpaRepository<Question, UUID> {
 
     List<Question> findByPageId(UUID pageId);
+    List<Question> findByPageIdOrderBySortOrderAsc(UUID pageId);
+
 }

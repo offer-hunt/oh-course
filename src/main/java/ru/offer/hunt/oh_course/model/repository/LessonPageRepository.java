@@ -12,4 +12,6 @@ public interface LessonPageRepository extends JpaRepository<LessonPage, UUID> {
 
     List<LessonPage> findByLessonIdOrderBySortOrderAsc(UUID lessonId);
     List<LessonPage> findByLessonId(UUID id);
+
+    void deleteAllByLessonId(UUID lessonId);
 }

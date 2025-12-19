@@ -13,6 +13,7 @@ import ru.offer.hunt.oh_course.model.dto.LessonCreateRequest;
 import ru.offer.hunt.oh_course.model.dto.LessonDto;
 import ru.offer.hunt.oh_course.model.dto.LessonPageDto;
 import ru.offer.hunt.oh_course.model.dto.LessonPageUpsertRequest;
+import ru.offer.hunt.oh_course.model.dto.LessonUpsertRequest;
 import ru.offer.hunt.oh_course.model.dto.MethodicalPageContentDto;
 import ru.offer.hunt.oh_course.model.dto.MethodicalPageContentUpsertRequest;
 import ru.offer.hunt.oh_course.model.dto.QuestionDto;
@@ -35,9 +36,22 @@ import ru.offer.hunt.oh_course.model.mapper.MethodicalPageContentMapper;
 import ru.offer.hunt.oh_course.model.mapper.QuestionMapper;
 import ru.offer.hunt.oh_course.model.mapper.QuestionOptionMapper;
 import ru.offer.hunt.oh_course.model.repository.CourseMemberRepository;
+import ru.offer.hunt.oh_course.model.mapper.LessonPageMapper;
+import ru.offer.hunt.oh_course.model.mapper.MethodicalPageContentMapper;
+import ru.offer.hunt.oh_course.model.mapper.QuestionMapper;
+import ru.offer.hunt.oh_course.model.mapper.QuestionOptionMapper;
+import ru.offer.hunt.oh_course.model.repository.CourseMemberRepository;
 import ru.offer.hunt.oh_course.model.repository.CourseRepository;
 import ru.offer.hunt.oh_course.model.repository.LessonPageRepository;
+import ru.offer.hunt.oh_course.model.repository.LessonPageRepository;
 import ru.offer.hunt.oh_course.model.repository.LessonRepository;
+import ru.offer.hunt.oh_course.model.repository.MethodicalPageContentRepository;
+import ru.offer.hunt.oh_course.model.repository.QuestionOptionRepository;
+import ru.offer.hunt.oh_course.model.repository.QuestionRepository;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
 import ru.offer.hunt.oh_course.model.repository.MethodicalPageContentRepository;
 import ru.offer.hunt.oh_course.model.repository.QuestionOptionRepository;
 import ru.offer.hunt.oh_course.model.repository.QuestionRepository;
@@ -46,11 +60,11 @@ import ru.offer.hunt.oh_course.model.repository.QuestionRepository;
 @RequiredArgsConstructor
 @Slf4j
 public class LessonService {
+    private final LessonRepository lessonRepository;
+    private final LessonMapper lessonMapper;
 
     private final CourseRepository courseRepository;
     private final CourseMemberRepository courseMemberRepository;
-    private final LessonRepository lessonRepository;
-    private final LessonMapper lessonMapper;
 
     private final LessonPageRepository lessonPageRepository;
     private final LessonPageMapper lessonPageMapper;
@@ -65,39 +79,115 @@ public class LessonService {
     private final QuestionOptionMapper questionOptionMapper;
 
     @Transactional
-    public LessonDto createLesson(UUID courseId, UUID userId, LessonCreateRequest req) {
+    public LessonDto createLesson(
+            UUID courseId,
+            UUID userId,
+            LessonCreateRequest request
+    ) {
         Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
+                .orElseThrow(() -> new IllegalArgumentException("Course not found"));
 
-        ensureCourseAdmin(courseId, userId);
+        if (!course.getAuthorId().equals(userId)) {
+            throw new SecurityException("Нет прав на добавление урока в этот курс");
+        }
+
+        if (request.getTitle() == null || request.getTitle().trim().isEmpty()) {
+            log.warn("Chapter add failed - empty title. CourseID: {}", courseId);
+            throw new IllegalArgumentException("Название главы не может быть пустым");
+        }
 
         if (course.getStatus() == CourseStatus.ARCHIVED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Нельзя добавлять уроки в архивированный курс");
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
-        boolean demo = Boolean.TRUE.equals(req.getDemo());
+        try {
+            OffsetDateTime now = OffsetDateTime.now();
+            boolean demo = Boolean.TRUE.equals(request.getDemo());
 
-        Lesson lesson = Lesson.builder()
-                .id(UUID.randomUUID())
-                .course(course)
-                .title(req.getTitle().trim())
-                .description(req.getDescription())
-                .orderIndex(req.getOrderIndex())
-                .durationMin(req.getDurationMin())
-                .demo(demo)
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
+            Lesson lesson = Lesson.builder()
+                    .id(UUID.randomUUID())
+                    .course(course)
+                    .title(request.getTitle().trim())
+                    .description(request.getDescription())
+                    .orderIndex(request.getOrderIndex())
+                    .durationMin(request.getDurationMin())
+                    .demo(demo)
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build();
 
-        lessonRepository.save(lesson);
+            lessonRepository.save(lesson);
 
-        log.info("Lesson created: lessonId={}, courseId={}, userId={}, demo={}",
-                lesson.getId(), courseId, userId, demo);
+            log.info("Chapter added. CourseID: {}, LessonID: {}", courseId, lesson.getId());
 
-        return lessonMapper.toDto(lesson);
+            return lessonMapper.toDto(lesson);
+
+        } catch (Exception e) {
+            log.error("Chapter add failed - server error. CourseID: {}", courseId, e);
+            throw e;
+        }
     }
 
+    @Transactional
+    public LessonDto updateLesson(UUID lessonId, UUID courseId, UUID userId, LessonUpsertRequest request) {
+        if (request.getTitle() == null || request.getTitle().trim().isEmpty()) {
+            log.warn("Chapter update failed - empty title. LessonID: {}", lessonId);
+            throw new IllegalArgumentException("Название главы не может быть пустым");
+        }
+
+        try {
+            Lesson lesson = lessonRepository.findById(lessonId)
+                    .orElseThrow(() -> new IllegalArgumentException("Lesson not found with id: " + lessonId));
+
+            Course course = courseRepository.findById(courseId)
+                    .orElseThrow(() -> new IllegalArgumentException("Course not found"));
+
+            if (!course.getAuthorId().equals(userId)) {
+                throw new SecurityException("Нет прав на редактирование этого урока");
+            }
+
+            Integer oldOrder = lesson.getOrderIndex();
+            lessonMapper.update(lesson, request);
+
+            lesson.setUpdatedAt(OffsetDateTime.now());
+            lesson.setOrderIndex(oldOrder);
+
+            lessonRepository.save(lesson);
+
+            log.info("Lesson updated. ID: {}", lessonId);
+
+            return lessonMapper.toDto(lesson);
+
+        } catch (Exception e) {
+            log.error("Chapter update failed - server error. LessonID: {}", lessonId, e);
+            throw e;
+        }
+    }
+
+    @Transactional
+    public void deleteLesson(UUID lessonId, UUID courseId, UUID userId) {
+        try {
+            Lesson lesson = lessonRepository.findById(lessonId)
+                    .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+
+            Course course = courseRepository.findById(courseId)
+                    .orElseThrow(() -> new IllegalArgumentException("Курс урока не найден"));
+
+            if (!course.getAuthorId().equals(userId)) {
+                throw new SecurityException("Нет прав на удаление урока");
+            }
+
+            lessonPageRepository.deleteAllByLessonId(lessonId);
+
+            lessonRepository.deleteById(lessonId);
+
+            log.info("Lesson deleted. ID: {}", lessonId);
+
+        } catch (Exception e) {
+            log.error("Lesson deletion failed - server error. ID: {}", lessonId, e);
+            throw e;
+        }
+    }
     @Transactional(readOnly = true)
     public List<LessonDto> listLessons(UUID courseId, UUID userId) {
         // чтобы не светить чужие черновики
@@ -253,5 +343,4 @@ public class LessonService {
 
         return questionOptionMapper.toDto(saved);
     }
-
 }
