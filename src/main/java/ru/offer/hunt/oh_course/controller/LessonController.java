@@ -18,7 +18,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@Tag(name = "Главы (Lessons)", description = "Управление главами курсов")
+@Tag(name = "Главы", description = "Управление главами курсов")
 public class LessonController {
     private final LessonService lessonService;
 
