@@ -168,15 +168,10 @@ public class CourseContentService {
 
                 for (LessonPage page : pages) {
 
-                    List<QuestionOutlineLiteDto> questions =
+                    List<UUID> questions =
                             questionRepository.findByPageIdOrderBySortOrderAsc(page.getId())
                                     .stream()
-                                    .map(q -> new QuestionOutlineLiteDto(
-                                            q.getId(),
-                                            q.getType(),
-                                            q.getSortOrder()
-                                    ))
-                                    .toList();
+                                    .map(CourseQuestion::getId).collect(Collectors.toList());
 
                     pageDtos.add(new LessonPageOutlineLiteDto(
                             page.getId(),

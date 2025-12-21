@@ -14,5 +14,5 @@ public class LessonPageOutlineLiteDto {
     String title;
     PageType pageType;
     Integer sortOrder;
-    List<QuestionOutlineLiteDto> questionOutlineLiteDtoList;
+    List<UUID> questions;
 }
