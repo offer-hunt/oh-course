@@ -147,14 +147,14 @@ public class CourseContentController {
 
 
     @Operation(
-            summary = "Получить структуру курса для расчёта прогресса",
+            summary = "Получить структуру курса для расчёта прогресса для LEARNING",
             description = """
                 Возвращает структуру курса без контента:
                 уроки → страницы → идентификаторы вопросов.
                 Используется Learning-сервисом для расчёта прогресса.
             """
     )
-    @GetMapping("/v1/courses/{courseId}/structure")
+    @GetMapping("/v1/courses/{courseId}/structureLearning")
     public CourseOutlineLiteDto getCourseStructure(
             @PathVariable UUID courseId
     ) {
