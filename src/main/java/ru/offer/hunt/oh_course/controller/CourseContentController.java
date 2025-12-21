@@ -13,17 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
-import ru.offer.hunt.oh_course.model.dto.CourseOutlineDto;
-import ru.offer.hunt.oh_course.model.dto.LessonPageDto;
-import ru.offer.hunt.oh_course.model.dto.LessonPageShortDto;
-import ru.offer.hunt.oh_course.model.dto.LessonPageUpsertRequest;
-import ru.offer.hunt.oh_course.model.dto.MethodicalPageContentDto;
-import ru.offer.hunt.oh_course.model.dto.MethodicalPageContentUpsertRequest;
-import ru.offer.hunt.oh_course.model.dto.PageViewDto;
-import ru.offer.hunt.oh_course.model.dto.QuestionDto;
-import ru.offer.hunt.oh_course.model.dto.QuestionOptionDto;
-import ru.offer.hunt.oh_course.model.dto.QuestionOptionUpsertRequest;
-import ru.offer.hunt.oh_course.model.dto.QuestionUpsertRequest;
+import ru.offer.hunt.oh_course.model.dto.*;
 import ru.offer.hunt.oh_course.security.SecurityUtils;
 import ru.offer.hunt.oh_course.service.CourseContentService;
 import ru.offer.hunt.oh_course.service.LessonService;
@@ -53,7 +43,6 @@ public class CourseContentController {
         log.debug("Get course outline: slug={}", slug);
         return courseContentService.getCourseOutline(slug, inviteCode);
     }
-
     @Operation(
             summary = "Получить список страниц демо-урока",
             description = """
@@ -154,5 +143,21 @@ public class CourseContentController {
     ) {
         UUID userId = SecurityUtils.getUserId(authentication);
         return lessonService.createQuestionOption(questionId, userId, req);
+    }
+
+
+    @Operation(
+            summary = "Получить структуру курса для расчёта прогресса",
+            description = """
+                Возвращает структуру курса без контента:
+                уроки → страницы → идентификаторы вопросов.
+                Используется Learning-сервисом для расчёта прогресса.
+            """
+    )
+    @GetMapping("/v1/courses/{courseId}/structure")
+    public CourseOutlineLiteDto getCourseStructure(
+            @PathVariable UUID courseId
+    ) {
+        return courseContentService.getCourseStructureLite(courseId);
     }
 }
