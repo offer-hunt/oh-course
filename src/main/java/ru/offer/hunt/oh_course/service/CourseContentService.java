@@ -1,26 +1,16 @@
 package ru.offer.hunt.oh_course.service;
 
 import java.util.*;
+import java.util.stream.Collectors;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import ru.offer.hunt.oh_course.model.dto.CourseOutlineDto;
-import ru.offer.hunt.oh_course.model.dto.CtaDto;
-import ru.offer.hunt.oh_course.model.dto.LessonOutlineDto;
-import ru.offer.hunt.oh_course.model.dto.LessonPageShortDto;
-import ru.offer.hunt.oh_course.model.dto.MethodicalContentDto;
-import ru.offer.hunt.oh_course.model.dto.PageViewDto;
-import ru.offer.hunt.oh_course.model.dto.QuestionOptionViewDto;
-import ru.offer.hunt.oh_course.model.dto.QuestionViewDto;
-import ru.offer.hunt.oh_course.model.entity.Course;
-import ru.offer.hunt.oh_course.model.entity.CourseQuestion;
-import ru.offer.hunt.oh_course.model.entity.CourseQuestionOption;
-import ru.offer.hunt.oh_course.model.entity.Lesson;
-import ru.offer.hunt.oh_course.model.entity.LessonPage;
-import ru.offer.hunt.oh_course.model.entity.MethodicalPageContent;
+import ru.offer.hunt.oh_course.model.dto.*;
+import ru.offer.hunt.oh_course.model.entity.*;
 import ru.offer.hunt.oh_course.model.enums.AccessType;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 import ru.offer.hunt.oh_course.model.enums.PageType;
@@ -159,6 +149,65 @@ public class CourseContentService {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Неизвестный тип страницы");
     }
 
+    public CourseOutlineLiteDto getCourseStructureLite(UUID courseId){
+        try{
+            Course course = courseRepository.findById(courseId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Курс не найден"));
+
+            ensurePublished(course);
+            List<Lesson> lessons = lessonRepository.findByCourseIdOrderByOrderIndexAsc(courseId);
+
+            List<LessonOutlineLiteDto> lessonDtos = new ArrayList<>();
+
+            for (Lesson lesson : lessons) {
+
+                List<LessonPage> pages =
+                        lessonPageRepository.findByLessonIdOrderBySortOrderAsc(lesson.getId());
+
+                List<LessonPageOutlineLiteDto> pageDtos = new ArrayList<>();
+
+                for (LessonPage page : pages) {
+
+                    List<UUID> questions =
+                            questionRepository.findByPageIdOrderBySortOrderAsc(page.getId())
+                                    .stream()
+                                    .map(CourseQuestion::getId).collect(Collectors.toList());
+
+                    pageDtos.add(new LessonPageOutlineLiteDto(
+                            page.getId(),
+                            page.getTitle(),
+                            page.getPageType(),
+                            page.getSortOrder(),
+                            questions
+                    ));
+                }
+
+                lessonDtos.add(new LessonOutlineLiteDto(
+                        lesson.getId(),
+                        lesson.getTitle(),
+                        lesson.getOrderIndex(),
+                        lesson.getDurationMin(),
+                        lesson.isDemo(),
+                        false,
+                        pageDtos
+                ));
+            }
+
+            return new CourseOutlineLiteDto(course.getId(), course.getSlug(), lessonDtos);
+
+
+        }catch (ResponseStatusException e) {
+            throw e;
+        }catch (Exception ex) {
+            log.error("Course get structure failed - server error, courseId={}", courseId, ex);
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Не удалось выдать страницу. Попробуйте позже."
+            );
+        }
+
+    }
+
     private List<QuestionOptionViewDto> mapOptionsForView(CourseQuestion q, List<CourseQuestionOption> options) {
         // options имеет смысл только для choice-вопросов
         if (q.getType() != QuestionType.SINGLE_CHOICE && q.getType() != QuestionType.MULTIPLE_CHOICE) {
@@ -195,4 +244,6 @@ public class CourseContentService {
             }
         }
     }
+
+
 }
