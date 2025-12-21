@@ -14,11 +14,13 @@ import ru.offer.hunt.oh_course.model.dto.AddTagsRequest;
 import ru.offer.hunt.oh_course.model.dto.CourseDto;
 import ru.offer.hunt.oh_course.model.dto.CoursePreviewDto;
 import ru.offer.hunt.oh_course.model.dto.CourseStatsDto;
+import ru.offer.hunt.oh_course.model.dto.CourseStructureDto;
 import ru.offer.hunt.oh_course.model.dto.CourseUpsertRequest;
 import ru.offer.hunt.oh_course.model.enums.CourseStatus;
 import ru.offer.hunt.oh_course.model.search.CourseFilter;
 import ru.offer.hunt.oh_course.security.SecurityUtils;
 import ru.offer.hunt.oh_course.service.CourseService;
+import ru.offer.hunt.oh_course.service.CourseStructureService;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +33,7 @@ import java.util.UUID;
 
 public class CourseController {
     private final CourseService courseService;
+    private final CourseStructureService courseStructureService;
 
     @Operation(
             summary = "Получить список опубликованных курсов",
@@ -117,11 +120,14 @@ public class CourseController {
                     По списку id курсов возвращает их полное представление CourseDto."""
     )
     @GetMapping("/batch")
-    public List<CourseDto> getCoursesBatch(
+    public List<CourseStructureDto> getCoursesBatch(
             @RequestParam("ids") List<UUID> ids
     ) {
         log.debug("Get courses batch: ids={}", ids);
-        return courseService.getCoursesByIds(ids);
+
+        return ids.stream()
+                .map(courseStructureService::getCourseStructure)
+                .toList();
     }
 
     @Operation(

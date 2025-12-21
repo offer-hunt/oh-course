@@ -14,4 +14,6 @@ public interface LessonPageRepository extends JpaRepository<LessonPage, UUID> {
     List<LessonPage> findByLessonId(UUID id);
 
     void deleteAllByLessonId(UUID lessonId);
+
+    List<LessonPage> findByLessonIdInOrderBySortOrderAsc(List<UUID> lessonIds);
 }

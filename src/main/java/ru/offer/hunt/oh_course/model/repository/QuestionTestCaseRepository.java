@@ -11,4 +11,7 @@ public interface QuestionTestCaseRepository extends JpaRepository<QuestionTestCa
     List<QuestionTestCase> findByQuestionId(UUID questionId);
 
     void deleteByQuestionId(UUID questionId);
+
+    List<QuestionTestCase> findByQuestionIdIn(List<UUID> questionIds);
+
 }

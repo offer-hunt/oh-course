@@ -11,4 +11,5 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
     List<Question> findByPageId(UUID pageId);
     List<Question> findByPageIdOrderBySortOrderAsc(UUID pageId);
 
+    List<Question> findByPageIdInOrderBySortOrderAsc(List<UUID> pageIds);
 }
